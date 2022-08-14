@@ -180,7 +180,7 @@ void Adapter::ResetInternalDeviceForTesting() {
 // AdapterDiscoverOptionsBase
 
 AdapterDiscoveryOptionsBase::AdapterDiscoveryOptionsBase(WGPUBackendType type)
-    : backendType(type) {}
+    : backendType(type), openXREnabled(false) /* TEMPORARY */ {}
 
 // Instance
 

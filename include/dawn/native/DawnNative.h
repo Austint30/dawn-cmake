@@ -123,6 +123,7 @@ class DAWN_NATIVE_EXPORT Adapter {
 struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptionsBase {
   public:
     const WGPUBackendType backendType;
+    const bool openXREnabled;
 
   protected:
     explicit AdapterDiscoveryOptionsBase(WGPUBackendType type);

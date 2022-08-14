@@ -79,6 +79,14 @@ if (NOT TARGET Vulkan-Headers)
     add_subdirectory(${DAWN_VULKAN_HEADERS_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-headers")
 endif()
 
+#if (NOT TARGET openxr)
+#    message(STATUS "Dawn: using openxr at ${DAWN_OPENXR_DIR}")
+#    add_subdirectory(${DAWN_OPENXR_DIR} "${CMAKE_CURRENT_BINARY_DIR}/openxr")
+#endif()
+
+add_library(dawn_openxr_headers INTERFACE)
+target_include_directories(dawn_openxr_headers INTERFACE ${DAWN_OPENXR_DIR}/include)
+
 # Header-only library for khrplatform.h
 add_library(dawn_khronos_platform INTERFACE)
 target_sources(dawn_khronos_platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos/KHR/khrplatform.h")

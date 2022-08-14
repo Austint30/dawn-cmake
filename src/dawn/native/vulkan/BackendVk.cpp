@@ -447,6 +447,10 @@ ResultOrError<std::vector<Ref<AdapterBase>>> Backend::DiscoverAdapters(
 
     std::vector<Ref<AdapterBase>> adapters;
 
+    if (optionsBase->openXREnabled){
+
+    }
+
     InstanceBase* instance = GetInstance();
     for (ICD icd : kICDs) {
 #if defined(DAWN_PLATFORM_MACOS)
