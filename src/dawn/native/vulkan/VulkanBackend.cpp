@@ -60,6 +60,11 @@ WGPUTextureFormat GetNativeSwapChainPreferredFormat(const DawnSwapChainImplement
 AdapterDiscoveryOptions::AdapterDiscoveryOptions()
     : AdapterDiscoveryOptionsBase(WGPUBackendType_Vulkan) {}
 
+AdapterDiscoveryOptions::AdapterDiscoveryOptions(
+    PFN_overrideVkCreateInstance overrideVkCreateInstancePFN)
+    : AdapterDiscoveryOptionsBase(WGPUBackendType_Vulkan),
+        overrideVkCreateInstancePFN(overrideVkCreateInstancePFN) {}
+
 #if defined(DAWN_PLATFORM_LINUX)
 ExternalImageDescriptorOpaqueFD::ExternalImageDescriptorOpaqueFD()
     : ExternalImageDescriptorFD(ExternalImageType::OpaqueFD) {}

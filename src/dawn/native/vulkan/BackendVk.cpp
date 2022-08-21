@@ -156,6 +156,10 @@ OnInstanceCreationDebugUtilsCallback(VkDebugUtilsMessageSeverityFlagBitsEXT mess
 
 VulkanInstance::VulkanInstance() = default;
 
+VulkanInstance::VulkanInstance(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN) {
+    mVkCreateInstancePFN = overrideVkCreateInstancePFN;
+}
+
 VulkanInstance::~VulkanInstance() {
     ASSERT(mMessageListenerDevices.empty());
 
@@ -188,8 +192,12 @@ const std::vector<VkPhysicalDevice>& VulkanInstance::GetPhysicalDevices() const 
 }
 
 // static
-ResultOrError<Ref<VulkanInstance>> VulkanInstance::Create(const InstanceBase* instance, ICD icd) {
-    Ref<VulkanInstance> vulkanInstance = AcquireRef(new VulkanInstance());
+ResultOrError<Ref<VulkanInstance>> VulkanInstance::Create(
+    const InstanceBase* instance,
+    ICD icd,
+    PFN_overrideVkCreateInstance overrideVkCreateInstancePFN = nullptr) {
+    Ref<VulkanInstance> vulkanInstance =
+        AcquireRef(new VulkanInstance(overrideVkCreateInstancePFN));
     DAWN_TRY(vulkanInstance->Initialize(instance, icd));
     return std::move(vulkanInstance);
 }
@@ -383,8 +391,14 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
         createInfoChain.Add(&validationFeatures, VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT);
     }
 
-    DAWN_TRY(CheckVkSuccess(mFunctions.CreateInstance(&createInfo, nullptr, &mInstance),
-                            "vkCreateInstance"));
+    if (mVkCreateInstancePFN == nullptr) {
+        DAWN_TRY(CheckVkSuccess(mFunctions.CreateInstance(&createInfo, nullptr, &mInstance),
+                                "vkCreateInstance"));
+    } else {
+        DAWN_TRY(CheckVkSuccess(
+            mVkCreateInstancePFN(&createInfo, nullptr, &mInstance, mFunctions.GetInstanceProcAddr),
+            "vkCreateInstance"));
+    }
 
     return usedKnobs;
 }
@@ -447,10 +461,6 @@ ResultOrError<std::vector<Ref<AdapterBase>>> Backend::DiscoverAdapters(
 
     std::vector<Ref<AdapterBase>> adapters;
 
-    if (optionsBase->openXREnabled){
-
-    }
-
     InstanceBase* instance = GetInstance();
     for (ICD icd : kICDs) {
 #if defined(DAWN_PLATFORM_MACOS)
@@ -463,7 +473,9 @@ ResultOrError<std::vector<Ref<AdapterBase>>> Backend::DiscoverAdapters(
             continue;
         }
         if (mVulkanInstances[icd] == nullptr && instance->ConsumedError([&]() -> MaybeError {
-                DAWN_TRY_ASSIGN(mVulkanInstances[icd], VulkanInstance::Create(instance, icd));
+                DAWN_TRY_ASSIGN(
+                    mVulkanInstances[icd],
+                    VulkanInstance::Create(instance, icd, options->overrideVkCreateInstancePFN));
                 return {};
             }())) {
             // Instance failed to initialize.

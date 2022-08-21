@@ -27,6 +27,7 @@
 #include "dawn/common/ityp_array.h"
 #include "dawn/native/vulkan/VulkanFunctions.h"
 #include "dawn/native/vulkan/VulkanInfo.h"
+#include "dawn/native/VulkanBackend.h"
 
 namespace dawn::native::vulkan {
 
@@ -47,7 +48,7 @@ class Device;
 // can delete the VkInstances that are not in use to avoid holding the discrete GPU active.
 class VulkanInstance : public RefCounted {
   public:
-    static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd);
+    static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd, PFN_overrideVkCreateInstance overrideVkCreateInstancePFN);
     ~VulkanInstance();
 
     const VulkanFunctions& GetFunctions() const;
@@ -63,6 +64,7 @@ class VulkanInstance : public RefCounted {
 
   private:
     VulkanInstance();
+    VulkanInstance(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN);
 
     MaybeError Initialize(const InstanceBase* instance, ICD icd);
     ResultOrError<VulkanGlobalKnobs> CreateVkInstance(const InstanceBase* instance);
@@ -73,6 +75,7 @@ class VulkanInstance : public RefCounted {
     VulkanGlobalInfo mGlobalInfo = {};
     VkInstance mInstance = VK_NULL_HANDLE;
     VulkanFunctions mFunctions;
+    PFN_overrideVkCreateInstance mVkCreateInstancePFN = nullptr;
 
     VkDebugUtilsMessengerEXT mDebugUtilsMessenger = VK_NULL_HANDLE;
 
