@@ -25,6 +25,9 @@
 namespace dawn::native::vulkan {
 
 typedef VkResult (*PFN_overrideVkCreateInstance)(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
+typedef std::vector<VkPhysicalDevice> (*PFN_overrideGatherPhysicalDevices)(
+    VkInstance instance,
+    const PFN_vkGetInstanceProcAddr& vkGetInstanceProcAddr);
 
 DAWN_NATIVE_EXPORT VkInstance GetInstance(WGPUDevice device);
 
@@ -38,9 +41,11 @@ GetNativeSwapChainPreferredFormat(const DawnSwapChainImplementation* swapChain);
 struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptionsBase {
     AdapterDiscoveryOptions();
     AdapterDiscoveryOptions(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN);
+    AdapterDiscoveryOptions(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN, PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices);
 
     bool forceSwiftShader = false;
     PFN_overrideVkCreateInstance overrideVkCreateInstancePFN = nullptr;
+    PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices = nullptr;
 };
 
 struct DAWN_NATIVE_EXPORT ExternalImageDescriptorVk : ExternalImageDescriptor {

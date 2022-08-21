@@ -65,6 +65,11 @@ AdapterDiscoveryOptions::AdapterDiscoveryOptions(
     : AdapterDiscoveryOptionsBase(WGPUBackendType_Vulkan),
         overrideVkCreateInstancePFN(overrideVkCreateInstancePFN) {}
 
+AdapterDiscoveryOptions::AdapterDiscoveryOptions(
+    PFN_overrideVkCreateInstance overrideVkCreateInstancePFN, PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices)
+    : AdapterDiscoveryOptionsBase(WGPUBackendType_Vulkan),
+      overrideVkCreateInstancePFN(overrideVkCreateInstancePFN), overrideGatherPhysicalDevices(overrideGatherPhysicalDevices) {}
+
 #if defined(DAWN_PLATFORM_LINUX)
 ExternalImageDescriptorOpaqueFD::ExternalImageDescriptorOpaqueFD()
     : ExternalImageDescriptorFD(ExternalImageType::OpaqueFD) {}

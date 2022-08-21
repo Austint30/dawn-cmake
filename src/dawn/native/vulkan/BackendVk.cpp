@@ -160,6 +160,11 @@ VulkanInstance::VulkanInstance(PFN_overrideVkCreateInstance overrideVkCreateInst
     mVkCreateInstancePFN = overrideVkCreateInstancePFN;
 }
 
+VulkanInstance::VulkanInstance(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN, PFN_overrideGatherPhysicalDevices gatherPhysicalDevicesPFN) {
+    mVkCreateInstancePFN = overrideVkCreateInstancePFN;
+    mGatherPhysicalDevicesPFN = gatherPhysicalDevicesPFN;
+}
+
 VulkanInstance::~VulkanInstance() {
     ASSERT(mMessageListenerDevices.empty());
 
@@ -195,9 +200,10 @@ const std::vector<VkPhysicalDevice>& VulkanInstance::GetPhysicalDevices() const 
 ResultOrError<Ref<VulkanInstance>> VulkanInstance::Create(
     const InstanceBase* instance,
     ICD icd,
-    PFN_overrideVkCreateInstance overrideVkCreateInstancePFN = nullptr) {
+    PFN_overrideVkCreateInstance overrideVkCreateInstancePFN = nullptr,
+    PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices = nullptr) {
     Ref<VulkanInstance> vulkanInstance =
-        AcquireRef(new VulkanInstance(overrideVkCreateInstancePFN));
+        AcquireRef(new VulkanInstance(overrideVkCreateInstancePFN, overrideGatherPhysicalDevices));
     DAWN_TRY(vulkanInstance->Initialize(instance, icd));
     return std::move(vulkanInstance);
 }
@@ -277,7 +283,11 @@ MaybeError VulkanInstance::Initialize(const InstanceBase* instance, ICD icd) {
         DAWN_TRY(RegisterDebugUtils());
     }
 
-    DAWN_TRY_ASSIGN(mPhysicalDevices, GatherPhysicalDevices(mInstance, mFunctions));
+    if (mGatherPhysicalDevicesPFN != nullptr){
+        mPhysicalDevices = mGatherPhysicalDevicesPFN(mInstance, mFunctions.GetInstanceProcAddr);
+    } else {
+        DAWN_TRY_ASSIGN(mPhysicalDevices, GatherPhysicalDevices(mInstance, mFunctions));
+    }
 
     return {};
 }
@@ -475,7 +485,7 @@ ResultOrError<std::vector<Ref<AdapterBase>>> Backend::DiscoverAdapters(
         if (mVulkanInstances[icd] == nullptr && instance->ConsumedError([&]() -> MaybeError {
                 DAWN_TRY_ASSIGN(
                     mVulkanInstances[icd],
-                    VulkanInstance::Create(instance, icd, options->overrideVkCreateInstancePFN));
+                    VulkanInstance::Create(instance, icd, options->overrideVkCreateInstancePFN, options->overrideGatherPhysicalDevices));
                 return {};
             }())) {
             // Instance failed to initialize.
