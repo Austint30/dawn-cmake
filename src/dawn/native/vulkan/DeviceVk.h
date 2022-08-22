@@ -43,7 +43,7 @@ class ResourceMemoryAllocator;
 
 class Device final : public DeviceBase {
   public:
-    static ResultOrError<Ref<Device>> Create(Adapter* adapter, const DeviceDescriptor* descriptor);
+    static ResultOrError<Ref<Device>> Create(Adapter* adapter, const DeviceDescriptor* descriptor, OverrideFunctions overrideFunctions);
     ~Device() override;
 
     MaybeError Initialize(const DeviceDescriptor* descriptor);
@@ -112,7 +112,7 @@ class Device final : public DeviceBase {
     const char* GetDebugPrefix() { return mDebugPrefix.c_str(); }
 
   private:
-    Device(Adapter* adapter, const DeviceDescriptor* descriptor);
+    Device(Adapter* adapter, const DeviceDescriptor* descriptor, OverrideFunctions overrideFunctions);
 
     ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
         const BindGroupDescriptor* descriptor) override;
@@ -183,6 +183,9 @@ class Device final : public DeviceBase {
 
     std::unique_ptr<external_memory::Service> mExternalMemoryService;
     std::unique_ptr<external_semaphore::Service> mExternalSemaphoreService;
+
+    OverrideFunctions mOverrideFunctions;
+
 
     ResultOrError<VkFence> GetUnusedFence();
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;

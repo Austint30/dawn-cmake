@@ -48,7 +48,8 @@ class Device;
 // can delete the VkInstances that are not in use to avoid holding the discrete GPU active.
 class VulkanInstance : public RefCounted {
   public:
-    static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd, PFN_overrideVkCreateInstance overrideVkCreateInstancePFN, PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices);
+    static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd);
+    static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd, OverrideFunctions overrideFunctions);
     ~VulkanInstance();
 
     const VulkanFunctions& GetFunctions() const;
@@ -62,10 +63,11 @@ class VulkanInstance : public RefCounted {
     void StopListeningForDeviceMessages(Device* device);
     bool HandleDeviceMessage(std::string deviceDebugPrefix, std::string message);
 
+    OverrideFunctions GetOverrideFunctions();
+
   private:
     VulkanInstance();
-    VulkanInstance(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN);
-    VulkanInstance(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN, PFN_overrideGatherPhysicalDevices mGatherPhysicalDevicesPFN);
+    VulkanInstance(OverrideFunctions overrideFunctions);
 
     MaybeError Initialize(const InstanceBase* instance, ICD icd);
     ResultOrError<VulkanGlobalKnobs> CreateVkInstance(const InstanceBase* instance);
@@ -76,8 +78,7 @@ class VulkanInstance : public RefCounted {
     VulkanGlobalInfo mGlobalInfo = {};
     VkInstance mInstance = VK_NULL_HANDLE;
     VulkanFunctions mFunctions;
-    PFN_overrideVkCreateInstance mVkCreateInstancePFN = nullptr;
-    PFN_overrideGatherPhysicalDevices mGatherPhysicalDevicesPFN = nullptr;
+    OverrideFunctions mOverrideFunctions;
 
     VkDebugUtilsMessengerEXT mDebugUtilsMessenger = VK_NULL_HANDLE;
 

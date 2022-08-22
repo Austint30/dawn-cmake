@@ -29,9 +29,23 @@ typedef std::vector<VkPhysicalDevice> (*PFN_overrideGatherPhysicalDevices)(
     VkInstance instance,
     const PFN_vkGetInstanceProcAddr& vkGetInstanceProcAddr);
 
+typedef VkResult (*PFN_overrideVkCreateDevice)(VkPhysicalDevice,const VkDeviceCreateInfo *,const VkAllocationCallbacks *,VkDevice *, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
+
+DAWN_NATIVE_EXPORT struct OverrideFunctions {
+    PFN_overrideVkCreateInstance overrideVkCreateInstance = nullptr;
+    PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices = nullptr;
+    PFN_overrideVkCreateDevice overrideVkCreateDevice = nullptr;
+};
+
 DAWN_NATIVE_EXPORT VkInstance GetInstance(WGPUDevice device);
 
+DAWN_NATIVE_EXPORT VkPhysicalDevice GetPhysicalDevice(WGPUDevice device);
+
 DAWN_NATIVE_EXPORT PFN_vkVoidFunction GetInstanceProcAddr(WGPUDevice device, const char* pName);
+
+DAWN_NATIVE_EXPORT VkDevice GetDevice(WGPUDevice device);
+
+DAWN_NATIVE_EXPORT int GetQueueGraphicsFamily(WGPUDevice device);
 
 DAWN_NATIVE_EXPORT DawnSwapChainImplementation CreateNativeSwapChainImpl(WGPUDevice device,
                                                                          ::VkSurfaceKHR surface);
@@ -40,12 +54,10 @@ GetNativeSwapChainPreferredFormat(const DawnSwapChainImplementation* swapChain);
 
 struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptionsBase {
     AdapterDiscoveryOptions();
-    AdapterDiscoveryOptions(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN);
-    AdapterDiscoveryOptions(PFN_overrideVkCreateInstance overrideVkCreateInstancePFN, PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices);
+    AdapterDiscoveryOptions(OverrideFunctions overrideFunctions);
 
     bool forceSwiftShader = false;
-    PFN_overrideVkCreateInstance overrideVkCreateInstancePFN = nullptr;
-    PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices = nullptr;
+    OverrideFunctions overrideFunctions;
 };
 
 struct DAWN_NATIVE_EXPORT ExternalImageDescriptorVk : ExternalImageDescriptor {

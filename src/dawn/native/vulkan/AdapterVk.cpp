@@ -342,7 +342,7 @@ bool Adapter::SupportsExternalImages() const {
 }
 
 ResultOrError<Ref<DeviceBase>> Adapter::CreateDeviceImpl(const DeviceDescriptor* descriptor) {
-    return Device::Create(this, descriptor);
+    return Device::Create(this, descriptor, mVulkanInstance->GetOverrideFunctions());
 }
 
 }  // namespace dawn::native::vulkan
