@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { globalTestConfig } from '../third_party/webgpu-cts/src/common/framework/test_config.js';
+import { dataCache } from '../third_party/webgpu-cts/src/common/framework/data_cache.js';
 import { DefaultTestFileLoader } from '../third_party/webgpu-cts/src/common/internal/file_loader.js';
 import { prettyPrintLog } from '../third_party/webgpu-cts/src/common/internal/logging/log_message.js';
 import { Logger } from '../third_party/webgpu-cts/src/common/internal/logging/logger.js';
@@ -36,9 +38,8 @@ function rateLimited(fn, intervalMs) {
   let last = undefined;
   let timer = undefined;
   const wrappedFn = (...args) => {
-    if (timer !== undefined || last === undefined) {
-      // If there is already a fn call scheduled, or the function is
-      // not enabled, return.
+    if (last === undefined) {
+      // If the function is not enabled, return.
       return;
     }
     // Get the current time as a number.
@@ -98,6 +99,12 @@ async function runCtsTestViaSocket(event) {
   runCtsTest(input['q'], input['w']);
 }
 
+dataCache.setStore({
+  load: async (path) => {
+    return await (await fetch(`/third_party/webgpu-cts/cache/data/${path}`)).text();
+  }
+});
+
 // Make a rate-limited version `sendMessageTestHeartbeat` that executes
 // at most once every 500 ms.
 const [sendHeartbeat, {
@@ -130,24 +137,8 @@ wrapPromiseWithHeartbeat(GPUQueue.prototype, 'onSubmittedWorkDone');
 wrapPromiseWithHeartbeat(GPUBuffer.prototype, 'mapAsync');
 wrapPromiseWithHeartbeat(GPUShaderModule.prototype, 'compilationInfo');
 
-// Make a wrapper around TestCaseRecorder that sends a heartbeat before any
-// recording operations.
-function makeRecorderWithHeartbeat(rec) {
-  return new Proxy(rec, {
-    // Create a wrapper around all methods of the TestCaseRecorder.
-    get(target, prop, receiver) {
-      const orig = Reflect.get(target, prop, receiver);
-      if (typeof orig !== 'function') {
-        // Return the original property if it is not a function.
-        return orig;
-      }
-      return (...args) => {
-        sendHeartbeat();
-        return orig.call(receiver, ...args)
-      }
-    }
-  });
-}
+globalTestConfig.testHeartbeatCallback = sendHeartbeat;
+globalTestConfig.noRaceWithRejectOnTimeout = true;
 
 async function runCtsTest(query, use_worker) {
   const workerEnabled = use_worker;
@@ -167,13 +158,12 @@ async function runCtsTest(query, use_worker) {
     const wpt_fn = async () => {
       sendMessageTestStarted();
       const [rec, res] = log.record(name);
-      const recWithHeartbeat = makeRecorderWithHeartbeat(rec);
 
       beginHeartbeatScope();
       if (worker) {
-        await worker.run(recWithHeartbeat, name, expectations);
+        await worker.run(rec, name, expectations);
       } else {
-        await testcase.run(recWithHeartbeat, expectations);
+        await testcase.run(rec, expectations);
       }
       endHeartbeatScope();
 

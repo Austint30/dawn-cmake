@@ -70,9 +70,10 @@ set_target_properties(dawn_node PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
     CXX_STANDARD 17
 )
-target_link_libraries(dawn_node dawn_node_binding dawn_node_interop dawn_native dawncpp dawn_proc)
+target_link_libraries(dawn_node dawn_node_binding dawn_node_interop dawn_native dawncpp dawn_proc
+                      libtint)
 target_include_directories(dawn_node PRIVATE
-    "${CMAKE_SOURCE_DIR}"
+    "${PROJECT_SOURCE_DIR}"
     "${DAWN_THIRD_PARTY_DIR}"
     "${NODE_API_HEADERS_DIR}/include"
     "${DAWN_NODE_GEN_DIR}"

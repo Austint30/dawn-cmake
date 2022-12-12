@@ -17,6 +17,7 @@
 #include "dawn/common/Assert.h"
 #include "dawn/common/BitSetIterator.h"
 #include "dawn/native/Toggles.h"
+#include "dawn/native/dawn_platform.h"
 
 namespace dawn::native {
 namespace {
@@ -260,10 +261,10 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "mips (level >= 2) doesn't work correctly. Workaround this issue by detecting this case and "
       "rendering to a temporary texture instead (with copies before and after if needed).",
       "https://crbug.com/dawn/1071"}},
-    {Toggle::EnableBlobCache,
-     {"enable_blob_cache",
-      "Enables usage of the blob cache (backed by the platform cache if set/passed). Necessary for "
-      "any persistent caching capabilities, i.e. pipeline caching.",
+    {Toggle::DisableBlobCache,
+     {"disable_blob_cache",
+      "Disables usage of the blob cache (backed by the platform cache if set/passed). Prevents any "
+      "persistent caching capabilities, i.e. pipeline caching.",
       "https://crbug.com/dawn/549"}},
     {Toggle::D3D12ForceClearCopyableDepthStencilTextureOnCreation,
      {"d3d12_force_clear_copyable_depth_stencil_texture_on_creation",
@@ -305,6 +306,32 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "integer that is greater than 2^24 or smaller than -2^24). This toggle is also enabled on "
       "Intel GPUs on Metal backend due to a driver issue on Intel Metal driver.",
       "https://crbug.com/dawn/537"}},
+    {Toggle::MetalUseMockBlitEncoderForWriteTimestamp,
+     {"metal_use_mock_blit_encoder_for_write_timestamp",
+      "Add mock blit command to blit encoder when encoding writeTimestamp as workaround on Metal."
+      "This toggle is enabled by default on Metal backend where GPU counters cannot be stored to"
+      "sampleBufferAttachments on empty blit encoder.",
+      "https://crbug.com/dawn/1473"}},
+    {Toggle::VulkanSplitCommandBufferOnDepthStencilComputeSampleAfterRenderPass,
+     {"vulkan_split_command_buffer_on_depth_stencil_compute_sample_after_render_pass",
+      "Splits any command buffer that samples a depth/stencil texture in a compute pass after that "
+      "texture was used as an attachment for a prior render pass. This toggle is enabled by "
+      "default on Qualcomm GPUs, which have been observed experiencing a driver crash in this "
+      "situation.",
+      "https://crbug.com/dawn/1564"}},
+    {Toggle::D3D12Allocate2DTexturewithCopyDstAsCommittedResource,
+     {"d3d12_allocate_2d_texture_with_copy_dst_as_committed_resource",
+      "Allocate each 2D texture with CopyDst usage as committed resources instead of placed "
+      "resources. This toggle is enabled by default on D3D12 backends using Intel Gen9.5 and Gen11 "
+      "GPUs due to a driver issue on Intel D3D12 driver.",
+      "https://crbug.com/1237175"}},
+    {Toggle::DisallowDeprecatedAPIs,
+     {"disallow_deprecated_apis",
+      "Disallow all deprecated paths by changing the deprecation warnings to validation error for "
+      "these paths."
+      "This toggle is off by default. It is expected to turn on or get removed when WebGPU V1 "
+      "ships and stays stable.",
+      "https://crbug.com/dawn/1563"}},
     // Comment to separate the }} so it is clearer what to copy-paste to add a toggle.
 }};
 }  // anonymous namespace
@@ -332,6 +359,81 @@ std::vector<const char*> TogglesSet::GetContainedToggleNames() const {
     }
 
     return togglesNameInUse;
+}
+
+TripleStateTogglesSet TripleStateTogglesSet::CreateFromTogglesDeviceDescriptor(
+    const DawnTogglesDeviceDescriptor* togglesDesc) {
+    TripleStateTogglesSet userToggles;
+    if (togglesDesc != nullptr) {
+        TogglesInfo togglesInfo;
+        for (uint32_t i = 0; i < togglesDesc->forceEnabledTogglesCount; ++i) {
+            Toggle toggle = togglesInfo.ToggleNameToEnum(togglesDesc->forceEnabledToggles[i]);
+            if (toggle != Toggle::InvalidEnum) {
+                userToggles.togglesIsProvided.Set(toggle, true);
+                userToggles.providedTogglesEnabled.Set(toggle, true);
+            }
+        }
+        for (uint32_t i = 0; i < togglesDesc->forceDisabledTogglesCount; ++i) {
+            Toggle toggle = togglesInfo.ToggleNameToEnum(togglesDesc->forceDisabledToggles[i]);
+            if (toggle != Toggle::InvalidEnum) {
+                userToggles.togglesIsProvided.Set(toggle, true);
+                userToggles.providedTogglesEnabled.Set(toggle, false);
+            }
+        }
+    }
+    return userToggles;
+}
+
+void TripleStateTogglesSet::Set(Toggle toggle, bool enabled) {
+    ASSERT(toggle != Toggle::InvalidEnum);
+    togglesIsProvided.Set(toggle, true);
+    providedTogglesEnabled.Set(toggle, enabled);
+}
+
+bool TripleStateTogglesSet::IsProvided(Toggle toggle) const {
+    return togglesIsProvided.Has(toggle);
+}
+// Return true if the toggle is provided in enable list, and false otherwise.
+bool TripleStateTogglesSet::IsEnabled(Toggle toggle) const {
+    return togglesIsProvided.Has(toggle) && providedTogglesEnabled.Has(toggle);
+}
+// Return true if the toggle is provided in disable list, and false otherwise.
+bool TripleStateTogglesSet::IsDisabled(Toggle toggle) const {
+    return togglesIsProvided.Has(toggle) && !providedTogglesEnabled.Has(toggle);
+}
+
+std::vector<const char*> TripleStateTogglesSet::GetEnabledToggleNames() const {
+    std::vector<const char*> enabledTogglesName(providedTogglesEnabled.toggleBitset.count());
+
+    uint32_t index = 0;
+    for (uint32_t i : IterateBitSet(providedTogglesEnabled.toggleBitset)) {
+        const Toggle& toggle = static_cast<Toggle>(i);
+        // All enabled toggles must be provided.
+        ASSERT(togglesIsProvided.Has(toggle));
+        const char* toggleName = ToggleEnumToName(toggle);
+        enabledTogglesName[index] = toggleName;
+        ++index;
+    }
+
+    return enabledTogglesName;
+}
+
+std::vector<const char*> TripleStateTogglesSet::GetDisabledToggleNames() const {
+    std::vector<const char*> enabledTogglesName(togglesIsProvided.toggleBitset.count() -
+                                                providedTogglesEnabled.toggleBitset.count());
+
+    uint32_t index = 0;
+    for (uint32_t i : IterateBitSet(togglesIsProvided.toggleBitset)) {
+        const Toggle& toggle = static_cast<Toggle>(i);
+        // Disabled toggles are those provided but not enabled.
+        if (!providedTogglesEnabled.Has(toggle)) {
+            const char* toggleName = ToggleEnumToName(toggle);
+            enabledTogglesName[index] = toggleName;
+            ++index;
+        }
+    }
+
+    return enabledTogglesName;
 }
 
 const char* ToggleEnumToName(Toggle toggle) {

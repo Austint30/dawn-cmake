@@ -133,7 +133,7 @@ class DynamicBufferOffsetTests : public DawnTest {
             )";
         }
 
-        fs << "let multipleNumber : u32 = " << multipleNumber << "u;\n";
+        fs << "const multipleNumber : u32 = " << multipleNumber << "u;\n";
         fs << R"(
             @fragment fn main() -> @location(0) vec4<f32> {
                 sBufferNotDynamic.value = uBufferNotDynamic.value.xy;
@@ -183,7 +183,7 @@ class DynamicBufferOffsetTests : public DawnTest {
             )";
         }
 
-        cs << "let multipleNumber : u32 = " << multipleNumber << "u;\n";
+        cs << "const multipleNumber : u32 = " << multipleNumber << "u;\n";
         cs << R"(
             @compute @workgroup_size(1) fn main() {
                 sBufferNotDynamic.value = uBufferNotDynamic.value.xy;
@@ -440,17 +440,17 @@ TEST_P(ClampedOOBDynamicBufferOffsetTests, CheckOOBAccess) {
     wgpu::ComputePipeline pipeline;
     {
         std::ostringstream shader;
-        shader << "let kArrayLength: u32 = " << kArrayLength << "u;\n";
+        shader << "const kArrayLength: u32 = " << kArrayLength << "u;\n";
         if (GetParam().mOOBRead) {
-            shader << "let kReadOffset: u32 = " << kOOBOffset << "u;\n";
+            shader << "const kReadOffset: u32 = " << kOOBOffset << "u;\n";
         } else {
-            shader << "let kReadOffset: u32 = 0u;\n";
+            shader << "const kReadOffset: u32 = 0u;\n";
         }
 
         if (GetParam().mOOBWrite) {
-            shader << "let kWriteOffset: u32 = " << kOOBOffset << "u;\n";
+            shader << "const kWriteOffset: u32 = " << kOOBOffset << "u;\n";
         } else {
-            shader << "let kWriteOffset: u32 = 0u;\n";
+            shader << "const kWriteOffset: u32 = 0u;\n";
         }
         switch (GetParam().mReadBufferUsage) {
             case wgpu::BufferUsage::Uniform:

@@ -351,18 +351,27 @@ MaybeError RenderPipeline::Initialize() {
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC descriptorD3D12 = {};
 
-    PerStage<ProgrammableStage> pipelineStages = GetAllStages();
-
     PerStage<D3D12_SHADER_BYTECODE*> shaders;
     shaders[SingleShaderStage::Vertex] = &descriptorD3D12.VS;
     shaders[SingleShaderStage::Fragment] = &descriptorD3D12.PS;
 
     PerStage<CompiledShader> compiledShader;
 
+    std::bitset<kMaxInterStageShaderVariables>* usedInterstageVariables = nullptr;
+    dawn::native::EntryPointMetadata fragmentEntryPoint;
+    if (GetStageMask() & wgpu::ShaderStage::Fragment) {
+        // Now that only fragment shader can have interstage inputs.
+        const ProgrammableStage& programmableStage = GetStage(SingleShaderStage::Fragment);
+        fragmentEntryPoint = programmableStage.module->GetEntryPoint(programmableStage.entryPoint);
+        usedInterstageVariables = &fragmentEntryPoint.usedInterStageVariables;
+    }
+
     for (auto stage : IterateStages(GetStageMask())) {
-        DAWN_TRY_ASSIGN(compiledShader[stage], ToBackend(pipelineStages[stage].module)
-                                                   ->Compile(pipelineStages[stage], stage,
-                                                             ToBackend(GetLayout()), compileFlags));
+        const ProgrammableStage& programmableStage = GetStage(stage);
+        DAWN_TRY_ASSIGN(compiledShader[stage],
+                        ToBackend(programmableStage.module)
+                            ->Compile(programmableStage, stage, ToBackend(GetLayout()),
+                                      compileFlags, usedInterstageVariables));
         *shaders[stage] = compiledShader[stage].GetD3D12ShaderBytecode();
     }
 

@@ -88,7 +88,7 @@ MaybeError ValidateTextureDepthStencilToBufferCopyRestrictions(const ImageCopyTe
         switch (src.texture->GetFormat().format) {
             case wgpu::TextureFormat::Depth24Plus:
             case wgpu::TextureFormat::Depth24PlusStencil8:
-                return DAWN_FORMAT_VALIDATION_ERROR(
+                return DAWN_VALIDATION_ERROR(
                     "The depth aspect of %s format %s cannot be selected in a texture to "
                     "buffer copy.",
                     src.texture, src.texture->GetFormat().format);
@@ -241,9 +241,10 @@ MaybeError ValidateRenderPassColorAttachment(DeviceBase* device,
     bool useClearColor = HasDeprecatedColor(colorAttachment);
     const dawn::native::Color& clearValue =
         useClearColor ? colorAttachment.clearColor : colorAttachment.clearValue;
+
     if (useClearColor) {
-        device->EmitDeprecationWarning(
-            "clearColor is deprecated, prefer using clearValue instead.");
+        DAWN_TRY(DAWN_MAKE_DEPRECATION_ERROR(
+            device, "clearColor is deprecated, prefer using clearValue instead."));
     }
 
     if (colorAttachment.loadOp == wgpu::LoadOp::Clear) {
@@ -306,11 +307,12 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
         !IsSubset(Aspect::Depth, attachment->GetAspects())) {
         if (depthStencilAttachment->depthLoadOp == wgpu::LoadOp::Load &&
             depthStencilAttachment->depthStoreOp == wgpu::StoreOp::Store) {
-            // TODO(dawn:1269): Remove this branch after the deprecation period.
-            device->EmitDeprecationWarning(
-                "Setting depthLoadOp and depthStoreOp when "
-                "the attachment has no depth aspect or depthReadOnly is true is "
-                "deprecated.");
+            DAWN_TRY(DAWN_MAKE_DEPRECATION_ERROR(
+                device,
+                "depthLoadOp is (%s) and depthStoreOp is (%s) "
+                "when depthReadOnly (%u) or the attachment (%s) has no depth aspect.",
+                depthStencilAttachment->depthLoadOp, depthStencilAttachment->depthStoreOp,
+                depthStencilAttachment->depthReadOnly, attachment));
         } else {
             DAWN_INVALID_IF(depthStencilAttachment->depthLoadOp != wgpu::LoadOp::Undefined,
                             "depthLoadOp (%s) must not be set if the attachment (%s) has "
@@ -341,11 +343,12 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
         !IsSubset(Aspect::Stencil, attachment->GetAspects())) {
         if (depthStencilAttachment->stencilLoadOp == wgpu::LoadOp::Load &&
             depthStencilAttachment->stencilStoreOp == wgpu::StoreOp::Store) {
-            // TODO(dawn:1269): Remove this branch after the deprecation period.
-            device->EmitDeprecationWarning(
-                "Setting stencilLoadOp and stencilStoreOp when "
-                "the attachment has no stencil aspect or stencilReadOnly is true is "
-                "deprecated.");
+            DAWN_TRY(DAWN_MAKE_DEPRECATION_ERROR(
+                device,
+                "stencilLoadOp is (%s) and stencilStoreOp is (%s) "
+                "when stencilReadOnly (%u) or the attachment (%s) has no stencil aspect.",
+                depthStencilAttachment->stencilLoadOp, depthStencilAttachment->stencilStoreOp,
+                depthStencilAttachment->stencilReadOnly, attachment));
         } else {
             DAWN_INVALID_IF(
                 depthStencilAttachment->stencilLoadOp != wgpu::LoadOp::Undefined,
@@ -376,8 +379,8 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
     }
 
     if (!std::isnan(depthStencilAttachment->clearDepth)) {
-        // TODO(dawn:1269): Remove this branch after the deprecation period.
-        device->EmitDeprecationWarning("clearDepth is deprecated, prefer depthClearValue instead.");
+        DAWN_TRY(DAWN_MAKE_DEPRECATION_ERROR(
+            device, "clearDepth is deprecated, prefer depthClearValue instead."));
         DAWN_INVALID_IF(
             depthStencilAttachment->clearDepth < 0.0f || depthStencilAttachment->clearDepth > 1.0f,
             "clearDepth is not between 0.0 and 1.0");
@@ -390,11 +393,10 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
                         "depthClearValue is not between 0.0 and 1.0");
     }
 
-    // TODO(dawn:1269): Remove after the deprecation period.
     if (depthStencilAttachment->stencilClearValue == 0 &&
         depthStencilAttachment->clearStencil != 0) {
-        device->EmitDeprecationWarning(
-            "clearStencil is deprecated, prefer stencilClearValue instead.");
+        DAWN_TRY(DAWN_MAKE_DEPRECATION_ERROR(
+            device, "clearStencil is deprecated, prefer stencilClearValue instead."));
     }
 
     // *sampleCount == 0 must only happen when there is no color attachment. In that case we
@@ -718,7 +720,7 @@ CommandEncoder* CommandEncoder::MakeError(DeviceBase* device) {
 
 CommandEncoder::CommandEncoder(DeviceBase* device, const CommandEncoderDescriptor* descriptor)
     : ApiObjectBase(device, descriptor->label), mEncodingContext(device, this) {
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 
     const DawnEncoderInternalUsageDescriptor* internalUsageDesc = nullptr;
     FindInChain(descriptor->nextInChain, &internalUsageDesc);
@@ -734,7 +736,7 @@ CommandEncoder::CommandEncoder(DeviceBase* device, ObjectBase::ErrorTag tag)
     : ApiObjectBase(device, tag),
       mEncodingContext(device, this),
       mUsageValidationMode(UsageValidationMode::Default) {
-    mEncodingContext.HandleError(DAWN_FORMAT_VALIDATION_ERROR("%s is invalid.", this));
+    mEncodingContext.HandleError(DAWN_VALIDATION_ERROR("%s is invalid.", this));
 }
 
 ObjectType CommandEncoder::GetType() const {
@@ -779,11 +781,14 @@ ComputePassEncoder* CommandEncoder::APIBeginComputePass(const ComputePassDescrip
 Ref<ComputePassEncoder> CommandEncoder::BeginComputePass(const ComputePassDescriptor* descriptor) {
     DeviceBase* device = GetDevice();
 
+    // If descriptor is invalid, make pass invalid and stop immediately
+    if (device->ConsumedError(ValidateComputePassDescriptor(device, descriptor))) {
+        return ComputePassEncoder::MakeError(device, this, &mEncodingContext);
+    }
+
     bool success = mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator* allocator) -> MaybeError {
-            DAWN_TRY(ValidateComputePassDescriptor(device, descriptor));
-
             BeginComputePassCmd* cmd =
                 allocator->Allocate<BeginComputePassCmd>(Command::BeginComputePass);
 
@@ -842,17 +847,20 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
 
     uint32_t width = 0;
     uint32_t height = 0;
+    uint32_t sampleCount = 0;
     bool depthReadOnly = false;
     bool stencilReadOnly = false;
     Ref<AttachmentState> attachmentState;
+
+    // If descriptor is invalid, make pass invalid and stop immediately
+    if (device->ConsumedError(ValidateRenderPassDescriptor(device, descriptor, &width, &height,
+                                                           &sampleCount, mUsageValidationMode))) {
+        return RenderPassEncoder::MakeError(device, this, &mEncodingContext);
+    }
+
     bool success = mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator* allocator) -> MaybeError {
-            uint32_t sampleCount = 0;
-
-            DAWN_TRY(ValidateRenderPassDescriptor(device, descriptor, &width, &height, &sampleCount,
-                                                  mUsageValidationMode));
-
             ASSERT(width > 0 && height > 0 && sampleCount > 0);
 
             mEncodingContext.WillBeginRenderPass();
@@ -911,7 +919,38 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
                     cmd->depthStencilAttachment.clearStencil =
                         descriptor->depthStencilAttachment->stencilClearValue;
                 }
+
+                // Copy parameters for the depth, reyifing the values when it is not present or
+                // readonly.
+                cmd->depthStencilAttachment.depthReadOnly = false;
+                cmd->depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Load;
+                cmd->depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
+                if (view->GetFormat().HasDepth()) {
+                    cmd->depthStencilAttachment.depthReadOnly =
+                        descriptor->depthStencilAttachment->depthReadOnly;
+                    if (!cmd->depthStencilAttachment.depthReadOnly) {
+                        cmd->depthStencilAttachment.depthLoadOp =
+                            descriptor->depthStencilAttachment->depthLoadOp;
+                        cmd->depthStencilAttachment.depthStoreOp =
+                            descriptor->depthStencilAttachment->depthStoreOp;
+                    }
+                }
+
+                // Copy parameters for the stencil, reyifing the values when it is not present or
+                // readonly.
+                cmd->depthStencilAttachment.stencilReadOnly = false;
+                cmd->depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Load;
+                cmd->depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
                 if (view->GetFormat().HasStencil()) {
+                    cmd->depthStencilAttachment.stencilReadOnly =
+                        descriptor->depthStencilAttachment->stencilReadOnly;
+                    if (!cmd->depthStencilAttachment.stencilReadOnly) {
+                        cmd->depthStencilAttachment.stencilLoadOp =
+                            descriptor->depthStencilAttachment->stencilLoadOp;
+                        cmd->depthStencilAttachment.stencilStoreOp =
+                            descriptor->depthStencilAttachment->stencilStoreOp;
+                    }
+
                     // GPURenderPassDepthStencilAttachment.stencilClearValue will be converted to
                     // the type of the stencil aspect of view by taking the same number of LSBs as
                     // the number of bits in the stencil aspect of one texel block of view.
@@ -919,35 +958,6 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
                                .GetAspectInfo(dawn::native::Aspect::Stencil)
                                .block.byteSize == 1u);
                     cmd->depthStencilAttachment.clearStencil &= 0xFF;
-                }
-
-                cmd->depthStencilAttachment.depthReadOnly =
-                    descriptor->depthStencilAttachment->depthReadOnly;
-                cmd->depthStencilAttachment.stencilReadOnly =
-                    descriptor->depthStencilAttachment->stencilReadOnly;
-
-                if (descriptor->depthStencilAttachment->depthReadOnly ||
-                    !IsSubset(Aspect::Depth,
-                              descriptor->depthStencilAttachment->view->GetAspects())) {
-                    cmd->depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Load;
-                    cmd->depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
-                } else {
-                    cmd->depthStencilAttachment.depthLoadOp =
-                        descriptor->depthStencilAttachment->depthLoadOp;
-                    cmd->depthStencilAttachment.depthStoreOp =
-                        descriptor->depthStencilAttachment->depthStoreOp;
-                }
-
-                if (descriptor->depthStencilAttachment->stencilReadOnly ||
-                    !IsSubset(Aspect::Stencil,
-                              descriptor->depthStencilAttachment->view->GetAspects())) {
-                    cmd->depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Load;
-                    cmd->depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
-                } else {
-                    cmd->depthStencilAttachment.stencilLoadOp =
-                        descriptor->depthStencilAttachment->stencilLoadOp;
-                    cmd->depthStencilAttachment.stencilStoreOp =
-                        descriptor->depthStencilAttachment->stencilStoreOp;
                 }
 
                 if (IsReadOnlyDepthStencilAttachment(descriptor->depthStencilAttachment)) {
@@ -1300,7 +1310,7 @@ void CommandEncoder::APIClearBuffer(BufferBase* buffer, uint64_t offset, uint64_
 
 void CommandEncoder::APIInjectValidationError(const char* message) {
     if (mEncodingContext.CheckCurrentEncoder(this)) {
-        mEncodingContext.HandleError(DAWN_VALIDATION_ERROR(message));
+        mEncodingContext.HandleError(DAWN_MAKE_ERROR(InternalErrorType::Validation, message));
     }
 }
 

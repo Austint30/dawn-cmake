@@ -14,7 +14,7 @@
 
 #include "src/tint/ast/call_statement.h"
 #include "src/tint/ast/stage_attribute.h"
-#include "src/tint/sem/depth_texture.h"
+#include "src/tint/type/depth_texture.h"
 #include "src/tint/utils/string.h"
 #include "src/tint/writer/spirv/spv_dump.h"
 #include "src/tint/writer/spirv/test_helper.h"
@@ -43,8 +43,8 @@ TEST_F(BuiltinBuilderTest, Call_TextureSampleCompare_Twice) {
     auto* s = ty.sampler(ast::SamplerKind::kComparisonSampler);
     auto* t = ty.depth_texture(ast::TextureDimension::k2d);
 
-    auto* tex = GlobalVar("texture", t, Binding(0), Group(0));
-    auto* sampler = GlobalVar("sampler", s, Binding(1), Group(0));
+    auto* tex = GlobalVar("texture", t, Binding(0_a), Group(0_a));
+    auto* sampler = GlobalVar("sampler", s, Binding(1_a), Group(0_a));
 
     auto* expr1 = Call("textureSampleCompare", "texture", "sampler", vec2<f32>(1_f, 2_f), 2_f);
     auto* expr2 = Call("textureSampleCompare", "texture", "sampler", vec2<f32>(1_f, 2_f), 2_f);
@@ -97,7 +97,7 @@ TEST_F(BuiltinBuilderTest, Call_TextureSampleCompare_Twice) {
 }
 
 TEST_F(BuiltinBuilderTest, Call_GLSLMethod_WithLoad_f32) {
-    auto* var = GlobalVar("ident", ty.f32(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("ident", ty.f32(), ast::AddressSpace::kPrivate);
     auto* expr = Call("round", "ident");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -133,7 +133,7 @@ OpFunctionEnd
 TEST_F(BuiltinBuilderTest, Call_GLSLMethod_WithLoad_f16) {
     Enable(ast::Extension::kF16);
 
-    auto* var = GlobalVar("ident", ty.f16(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("ident", ty.f16(), ast::AddressSpace::kPrivate);
     auto* expr = Call("round", "ident");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -172,7 +172,7 @@ namespace logical_builtin_tests {
 using BuiltinBoolTest = BuiltinBuilderTestWithParam<BuiltinData>;
 TEST_P(BuiltinBoolTest, Call_Bool_Scalar) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.bool_(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.bool_(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -198,7 +198,7 @@ TEST_P(BuiltinBoolTest, Call_Bool_Scalar) {
 
 TEST_P(BuiltinBoolTest, Call_Bool_Vector) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.vec3<bool>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<bool>(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -231,9 +231,9 @@ INSTANTIATE_TEST_SUITE_P(BuiltinBuilderTest,
                          testing::Values(BuiltinData{"any", "OpAny"}, BuiltinData{"all", "OpAll"}));
 
 TEST_F(BuiltinBuilderTest, Call_Select) {
-    auto* v3 = GlobalVar("v3", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* v3 = GlobalVar("v3", ty.vec3<f32>(), ast::AddressSpace::kPrivate);
 
-    auto* bool_v3 = GlobalVar("bool_v3", ty.vec3<bool>(), ast::StorageClass::kPrivate);
+    auto* bool_v3 = GlobalVar("bool_v3", ty.vec3<bool>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("select", "v3", "v3", "bool_v3");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -277,7 +277,8 @@ TEST_F(BuiltinBuilderTest, Call_ArrayLength) {
     auto* s = Structure("my_struct", utils::Vector{
                                          Member("a", ty.array<f32>(4)),
                                      });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kRead, Binding(1_a),
+              Group(2_a));
     auto* expr = Call("arrayLength", AddressOf(MemberAccessor("b", "a")));
 
     Func("a_func", utils::Empty, ty.void_(),
@@ -320,7 +321,8 @@ TEST_F(BuiltinBuilderTest, Call_ArrayLength_OtherMembersInStruct) {
                                          Member("z", ty.f32()),
                                          Member(4, "a", ty.array<f32>(4)),
                                      });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kRead, Binding(1_a),
+              Group(2_a));
     auto* expr = Call("arrayLength", AddressOf(MemberAccessor("b", "a")));
 
     Func("a_func", utils::Empty, ty.void_(),
@@ -362,7 +364,8 @@ TEST_F(BuiltinBuilderTest, Call_ArrayLength_ViaLets) {
     auto* s = Structure("my_struct", utils::Vector{
                                          Member("a", ty.array<f32>(4)),
                                      });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kRead, Binding(1_a),
+              Group(2_a));
 
     auto* p = Let("p", AddressOf("b"));
     auto* p2 = Let("p2", AddressOf(MemberAccessor(Deref(p), "a")));
@@ -420,7 +423,8 @@ TEST_F(BuiltinBuilderTest, Call_ArrayLength_ViaLets_WithPtrNoise) {
     auto* s = Structure("my_struct", utils::Vector{
                                          Member("a", ty.array<f32>(4)),
                                      });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(1), Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kRead, Binding(1_a),
+              Group(2_a));
 
     auto* p = Let("p", AddressOf(Deref(AddressOf("b"))));
     auto* p2 = Let("p2", AddressOf(Deref(p)));
@@ -1626,7 +1630,7 @@ OpFunctionEnd
     EXPECT_EQ(got, expect);
 }
 
-TEST_F(BuiltinBuilderTest, Call_Modf_f32) {
+TEST_F(BuiltinBuilderTest, Runtime_Call_Modf_f32) {
     auto* vec = Var("vec", vec2<f32>(1_f, 2_f));
     auto* expr = Call("modf", vec);
     Func("a_func", utils::Empty, ty.void_(),
@@ -1649,7 +1653,7 @@ OpEntryPoint Fragment %3 "a_func"
 OpExecutionMode %3 OriginUpperLeft
 OpName %3 "a_func"
 OpName %10 "vec"
-OpName %14 "__modf_result_vec2"
+OpName %14 "__modf_result_vec2_f32"
 OpMemberName %14 0 "fract"
 OpMemberName %14 1 "whole"
 OpMemberDecorate %14 0 Offset 0
@@ -1678,7 +1682,7 @@ OpFunctionEnd
     Validate(b);
 }
 
-TEST_F(BuiltinBuilderTest, Call_Modf_f16) {
+TEST_F(BuiltinBuilderTest, Runtime_Call_Modf_f16) {
     Enable(ast::Extension::kF16);
 
     auto* vec = Var("vec", vec2<f16>(1_h, 2_h));
@@ -1736,7 +1740,101 @@ OpFunctionEnd
     Validate(b);
 }
 
-TEST_F(BuiltinBuilderTest, Call_Frexp_f32) {
+TEST_F(BuiltinBuilderTest, Const_Call_Modf_f32) {
+    auto* expr = Call("modf", vec2<f32>(1_f, 2_f));
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(expr),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = Build();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+%9 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %3 "a_func"
+OpExecutionMode %3 OriginUpperLeft
+OpName %3 "a_func"
+OpName %6 "__modf_result_vec2_f32"
+OpMemberName %6 0 "fract"
+OpMemberName %6 1 "whole"
+OpMemberDecorate %6 0 Offset 0
+OpMemberDecorate %6 1 Offset 8
+%2 = OpTypeVoid
+%1 = OpTypeFunction %2
+%8 = OpTypeFloat 32
+%7 = OpTypeVector %8 2
+%6 = OpTypeStruct %7 %7
+%10 = OpConstant %8 1
+%11 = OpConstant %8 2
+%12 = OpConstantComposite %7 %10 %11
+%3 = OpFunction %2 None %1
+%4 = OpLabel
+%5 = OpExtInst %6 %9 ModfStruct %12
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
+TEST_F(BuiltinBuilderTest, Const_Call_Modf_f16) {
+    Enable(ast::Extension::kF16);
+
+    auto* expr = Call("modf", vec2<f16>(1_h, 2_h));
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(expr),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = Build();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+OpCapability Float16
+OpCapability UniformAndStorageBuffer16BitAccess
+OpCapability StorageBuffer16BitAccess
+OpCapability StorageInputOutput16
+%9 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %3 "a_func"
+OpExecutionMode %3 OriginUpperLeft
+OpName %3 "a_func"
+OpName %6 "__modf_result_vec2_f16"
+OpMemberName %6 0 "fract"
+OpMemberName %6 1 "whole"
+OpMemberDecorate %6 0 Offset 0
+OpMemberDecorate %6 1 Offset 4
+%2 = OpTypeVoid
+%1 = OpTypeFunction %2
+%8 = OpTypeFloat 16
+%7 = OpTypeVector %8 2
+%6 = OpTypeStruct %7 %7
+%10 = OpConstant %8 0x1p+0
+%11 = OpConstant %8 0x1p+1
+%12 = OpConstantComposite %7 %10 %11
+%3 = OpFunction %2 None %1
+%4 = OpLabel
+%5 = OpExtInst %6 %9 ModfStruct %12
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
+TEST_F(BuiltinBuilderTest, Runtime_Call_Frexp_f32) {
     auto* vec = Var("vec", vec2<f32>(1_f, 2_f));
     auto* expr = Call("frexp", vec);
     Func("a_func", utils::Empty, ty.void_(),
@@ -1759,8 +1857,8 @@ OpEntryPoint Fragment %3 "a_func"
 OpExecutionMode %3 OriginUpperLeft
 OpName %3 "a_func"
 OpName %10 "vec"
-OpName %14 "__frexp_result_vec2"
-OpMemberName %14 0 "sig"
+OpName %14 "__frexp_result_vec2_f32"
+OpMemberName %14 0 "fract"
 OpMemberName %14 1 "exp"
 OpMemberDecorate %14 0 Offset 0
 OpMemberDecorate %14 1 Offset 8
@@ -1790,7 +1888,7 @@ OpFunctionEnd
     Validate(b);
 }
 
-TEST_F(BuiltinBuilderTest, Call_Frexp_f16) {
+TEST_F(BuiltinBuilderTest, Runtime_Call_Frexp_f16) {
     Enable(ast::Extension::kF16);
 
     auto* vec = Var("vec", vec2<f16>(1_h, 2_h));
@@ -1820,7 +1918,7 @@ OpExecutionMode %3 OriginUpperLeft
 OpName %3 "a_func"
 OpName %10 "vec"
 OpName %14 "__frexp_result_vec2_f16"
-OpMemberName %14 0 "sig"
+OpMemberName %14 0 "fract"
 OpMemberName %14 1 "exp"
 OpMemberDecorate %14 0 Offset 0
 OpMemberDecorate %14 1 Offset 8
@@ -1850,6 +1948,255 @@ OpFunctionEnd
     Validate(b);
 }
 
+TEST_F(BuiltinBuilderTest, Const_Call_Frexp_f32) {
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("frexp", vec2<f32>(1_f, 2_f))),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = Build();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+%11 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %3 "a_func"
+OpExecutionMode %3 OriginUpperLeft
+OpName %3 "a_func"
+OpName %6 "__frexp_result_vec2_f32"
+OpMemberName %6 0 "fract"
+OpMemberName %6 1 "exp"
+OpMemberDecorate %6 0 Offset 0
+OpMemberDecorate %6 1 Offset 8
+%2 = OpTypeVoid
+%1 = OpTypeFunction %2
+%8 = OpTypeFloat 32
+%7 = OpTypeVector %8 2
+%10 = OpTypeInt 32 1
+%9 = OpTypeVector %10 2
+%6 = OpTypeStruct %7 %9
+%12 = OpConstant %8 1
+%13 = OpConstant %8 2
+%14 = OpConstantComposite %7 %12 %13
+%3 = OpFunction %2 None %1
+%4 = OpLabel
+%5 = OpExtInst %6 %11 FrexpStruct %14
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
+TEST_F(BuiltinBuilderTest, Const_Call_Frexp_f16) {
+    Enable(ast::Extension::kF16);
+
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             CallStmt(Call("frexp", vec2<f16>(1_h, 2_h))),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = Build();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+OpCapability Float16
+OpCapability UniformAndStorageBuffer16BitAccess
+OpCapability StorageBuffer16BitAccess
+OpCapability StorageInputOutput16
+%11 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %3 "a_func"
+OpExecutionMode %3 OriginUpperLeft
+OpName %3 "a_func"
+OpName %6 "__frexp_result_vec2_f16"
+OpMemberName %6 0 "fract"
+OpMemberName %6 1 "exp"
+OpMemberDecorate %6 0 Offset 0
+OpMemberDecorate %6 1 Offset 8
+%2 = OpTypeVoid
+%1 = OpTypeFunction %2
+%8 = OpTypeFloat 16
+%7 = OpTypeVector %8 2
+%10 = OpTypeInt 32 1
+%9 = OpTypeVector %10 2
+%6 = OpTypeStruct %7 %9
+%12 = OpConstant %8 0x1p+0
+%13 = OpConstant %8 0x1p+1
+%14 = OpConstantComposite %7 %12 %13
+%3 = OpFunction %2 None %1
+%4 = OpLabel
+%5 = OpExtInst %6 %11 FrexpStruct %14
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
+// TODO(crbug.com/tint/1757): Remove once deprecation period for `frexp().sig` is over
+TEST_F(BuiltinBuilderTest, Frexp_Sig_Deprecation) {
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             Decl(Var("vec", vec2<f32>(1_f, 2_f))),
+             Decl(Let("s", MemberAccessor(Call("frexp", "vec"), "sig"))),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = Build();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+%17 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %3 "a_func"
+OpExecutionMode %3 OriginUpperLeft
+OpName %3 "a_func"
+OpName %10 "vec"
+OpName %14 "__frexp_result_vec2_f32"
+OpMemberName %14 0 "fract"
+OpMemberName %14 1 "exp"
+OpMemberDecorate %14 0 Offset 0
+OpMemberDecorate %14 1 Offset 8
+%2 = OpTypeVoid
+%1 = OpTypeFunction %2
+%6 = OpTypeFloat 32
+%5 = OpTypeVector %6 2
+%7 = OpConstant %6 1
+%8 = OpConstant %6 2
+%9 = OpConstantComposite %5 %7 %8
+%11 = OpTypePointer Function %5
+%12 = OpConstantNull %5
+%16 = OpTypeInt 32 1
+%15 = OpTypeVector %16 2
+%14 = OpTypeStruct %5 %15
+%3 = OpFunction %2 None %1
+%4 = OpLabel
+%10 = OpVariable %11 Function %12
+OpStore %10 %9
+%18 = OpLoad %5 %10
+%13 = OpExtInst %14 %17 FrexpStruct %18
+%19 = OpCompositeExtract %5 %13 0
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
+TEST_F(BuiltinBuilderTest, Call_QuantizeToF16_Scalar) {
+    GlobalVar("v", Expr(2_f), ast::AddressSpace::kPrivate);
+
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             Decl(Let("l", Call("quantizeToF16", "v"))),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = SanitizeAndBuild();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %7 "a_func"
+OpExecutionMode %7 OriginUpperLeft
+OpName %3 "v"
+OpName %7 "a_func"
+%1 = OpTypeFloat 32
+%2 = OpConstant %1 2
+%4 = OpTypePointer Private %1
+%3 = OpVariable %4 Private %2
+%6 = OpTypeVoid
+%5 = OpTypeFunction %6
+%7 = OpFunction %6 None %5
+%8 = OpLabel
+%10 = OpLoad %1 %3
+%9 = OpQuantizeToF16 %1 %10
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
+TEST_F(BuiltinBuilderTest, Call_QuantizeToF16_Vector) {
+    GlobalVar("v", vec3<f32>(2_f), ast::AddressSpace::kPrivate);
+
+    Func("a_func", utils::Empty, ty.void_(),
+         utils::Vector{
+             Decl(Let("l", Call("quantizeToF16", "v"))),
+         },
+         utils::Vector{
+             Stage(ast::PipelineStage::kFragment),
+         });
+
+    spirv::Builder& b = SanitizeAndBuild();
+
+    ASSERT_TRUE(b.Build()) << b.error();
+    auto got = DumpBuilder(b);
+    auto* expect = R"(OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %24 "a_func"
+OpExecutionMode %24 OriginUpperLeft
+OpName %5 "v"
+OpName %8 "tint_quantizeToF16"
+OpName %9 "v_1"
+OpName %24 "a_func"
+%2 = OpTypeFloat 32
+%1 = OpTypeVector %2 3
+%3 = OpConstant %2 2
+%4 = OpConstantComposite %1 %3 %3 %3
+%6 = OpTypePointer Private %1
+%5 = OpVariable %6 Private %4
+%7 = OpTypeFunction %1 %1
+%12 = OpTypeInt 32 0
+%13 = OpConstantNull %12
+%16 = OpConstant %12 1
+%19 = OpConstant %12 2
+%23 = OpTypeVoid
+%22 = OpTypeFunction %23
+%8 = OpFunction %1 None %7
+%9 = OpFunctionParameter %1
+%10 = OpLabel
+%14 = OpCompositeExtract %2 %9 0
+%11 = OpQuantizeToF16 %2 %14
+%17 = OpCompositeExtract %2 %9 1
+%15 = OpQuantizeToF16 %2 %17
+%20 = OpCompositeExtract %2 %9 2
+%18 = OpQuantizeToF16 %2 %20
+%21 = OpCompositeConstruct %1 %11 %15 %18
+OpReturnValue %21
+OpFunctionEnd
+%24 = OpFunction %23 None %22
+%25 = OpLabel
+%27 = OpLoad %1 %5
+%26 = OpFunctionCall %1 %8 %27
+OpReturn
+OpFunctionEnd
+)";
+    EXPECT_EQ(expect, got);
+
+    Validate(b);
+}
+
 }  // namespace float_builtin_tests
 
 // Tests for Numeric builtins with all integer parameter
@@ -1858,7 +2205,7 @@ namespace integer_builtin_tests {
 using BuiltinIntTest = BuiltinBuilderTestWithParam<BuiltinData>;
 TEST_P(BuiltinIntTest, Call_SInt_Scalar) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.i32(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.i32(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -1888,7 +2235,7 @@ OpReturn
 
 TEST_P(BuiltinIntTest, Call_SInt_Vector) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.vec3<i32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<i32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -1919,7 +2266,7 @@ OpReturn
 
 TEST_P(BuiltinIntTest, Call_UInt_Scalar) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.u32(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.u32(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -1949,7 +2296,7 @@ OpReturn
 
 TEST_P(BuiltinIntTest, Call_UInt_Vector) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.vec3<u32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<u32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -2820,7 +3167,7 @@ OpFunctionEnd
 namespace matrix_builtin_tests {
 
 TEST_F(BuiltinBuilderTest, Call_Determinant_f32) {
-    auto* var = GlobalVar("var", ty.mat3x3<f32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("var", ty.mat3x3<f32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("determinant", "var");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -2857,7 +3204,7 @@ OpFunctionEnd
 TEST_F(BuiltinBuilderTest, Call_Determinant_f16) {
     Enable(ast::Extension::kF16);
 
-    auto* var = GlobalVar("var", ty.mat3x3<f16>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("var", ty.mat3x3<f16>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("determinant", "var");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -2892,7 +3239,7 @@ OpFunctionEnd
 }
 
 TEST_F(BuiltinBuilderTest, Call_Transpose_f32) {
-    auto* var = GlobalVar("var", ty.mat2x3<f32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("var", ty.mat2x3<f32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("transpose", "var");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -2930,7 +3277,7 @@ OpFunctionEnd
 TEST_F(BuiltinBuilderTest, Call_Transpose_f16) {
     Enable(ast::Extension::kF16);
 
-    auto* var = GlobalVar("var", ty.mat2x3<f16>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("var", ty.mat2x3<f16>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("transpose", "var");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -2971,7 +3318,7 @@ OpFunctionEnd
 namespace vector_builtin_tests {
 
 TEST_F(BuiltinBuilderTest, Call_Dot_F32) {
-    auto* var = GlobalVar("v", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<f32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("dot", "v", "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -3002,7 +3349,7 @@ OpReturn
 TEST_F(BuiltinBuilderTest, Call_Dot_F16) {
     Enable(ast::Extension::kF16);
 
-    auto* var = GlobalVar("v", ty.vec3<f16>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<f16>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("dot", "v", "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -3031,7 +3378,7 @@ OpReturn
 }
 
 TEST_F(BuiltinBuilderTest, Call_Dot_U32) {
-    auto* var = GlobalVar("v", ty.vec3<u32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<u32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("dot", "v", "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -3070,7 +3417,7 @@ OpReturn
 }
 
 TEST_F(BuiltinBuilderTest, Call_Dot_I32) {
-    auto* var = GlobalVar("v", ty.vec3<i32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<i32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call("dot", "v", "v");
     auto* func = Func("a_func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -3116,7 +3463,7 @@ namespace derivative_builtin_tests {
 using BuiltinDeriveTest = BuiltinBuilderTestWithParam<BuiltinData>;
 TEST_P(BuiltinDeriveTest, Call_Derivative_Scalar) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.f32(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.f32(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -3149,7 +3496,7 @@ OpReturn
 
 TEST_P(BuiltinDeriveTest, Call_Derivative_Vector) {
     auto param = GetParam();
-    auto* var = GlobalVar("v", ty.vec3<f32>(), ast::StorageClass::kPrivate);
+    auto* var = GlobalVar("v", ty.vec3<f32>(), ast::AddressSpace::kPrivate);
     auto* expr = Call(param.name, "v");
     auto* func = Func("func", utils::Empty, ty.void_(),
                       utils::Vector{
@@ -3219,8 +3566,8 @@ TEST_F(BuiltinBuilderTest, Call_AtomicLoad) {
                                  Member("u", ty.atomic<u32>()),
                                  Member("i", ty.atomic<i32>()),
                              });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(1),
-              Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -3237,25 +3584,26 @@ TEST_F(BuiltinBuilderTest, Call_AtomicLoad) {
 
     ASSERT_EQ(b.functions().size(), 1_u);
 
-    auto* expected_types = R"(%4 = OpTypeInt 32 0
-%5 = OpTypeInt 32 1
-%3 = OpTypeStruct %4 %5
+    auto* expected_types = R"(%5 = OpTypeInt 32 0
+%6 = OpTypeInt 32 1
+%4 = OpTypeStruct %5 %6
+%3 = OpTypeStruct %4
 %2 = OpTypePointer StorageBuffer %3
 %1 = OpVariable %2 StorageBuffer
-%7 = OpTypeVoid
-%6 = OpTypeFunction %7
-%11 = OpConstant %4 1
-%12 = OpConstant %4 0
-%14 = OpTypePointer StorageBuffer %4
-%18 = OpTypePointer StorageBuffer %5
+%8 = OpTypeVoid
+%7 = OpTypeFunction %8
+%12 = OpConstant %5 1
+%13 = OpConstant %5 0
+%15 = OpTypePointer StorageBuffer %5
+%19 = OpTypePointer StorageBuffer %6
 )";
     auto got_types = DumpInstructions(b.types());
     EXPECT_EQ(expected_types, got_types);
 
-    auto* expected_instructions = R"(%15 = OpAccessChain %14 %1 %12
-%10 = OpAtomicLoad %4 %15 %11 %12
-%19 = OpAccessChain %18 %1 %11
-%16 = OpAtomicLoad %5 %19 %11 %12
+    auto* expected_instructions = R"(%16 = OpAccessChain %15 %1 %13 %13
+%11 = OpAtomicLoad %5 %16 %12 %13
+%20 = OpAccessChain %19 %1 %13 %12
+%17 = OpAtomicLoad %6 %20 %12 %13
 OpReturn
 )";
     auto got_instructions = DumpInstructions(b.functions()[0].instructions());
@@ -3282,8 +3630,8 @@ TEST_F(BuiltinBuilderTest, Call_AtomicStore) {
                                  Member("u", ty.atomic<u32>()),
                                  Member("i", ty.atomic<i32>()),
                              });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(1),
-              Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -3302,34 +3650,35 @@ TEST_F(BuiltinBuilderTest, Call_AtomicStore) {
 
     ASSERT_EQ(b.functions().size(), 1_u);
 
-    auto* expected_types = R"(%4 = OpTypeInt 32 0
-%5 = OpTypeInt 32 1
-%3 = OpTypeStruct %4 %5
+    auto* expected_types = R"(%5 = OpTypeInt 32 0
+%6 = OpTypeInt 32 1
+%4 = OpTypeStruct %5 %6
+%3 = OpTypeStruct %4
 %2 = OpTypePointer StorageBuffer %3
 %1 = OpVariable %2 StorageBuffer
-%7 = OpTypeVoid
-%6 = OpTypeFunction %7
-%10 = OpConstant %4 1
-%12 = OpTypePointer Function %4
-%13 = OpConstantNull %4
-%14 = OpConstant %5 2
-%16 = OpTypePointer Function %5
-%17 = OpConstantNull %5
-%19 = OpConstant %4 0
-%21 = OpTypePointer StorageBuffer %4
-%26 = OpTypePointer StorageBuffer %5
+%8 = OpTypeVoid
+%7 = OpTypeFunction %8
+%11 = OpConstant %5 1
+%13 = OpTypePointer Function %5
+%14 = OpConstantNull %5
+%15 = OpConstant %6 2
+%17 = OpTypePointer Function %6
+%18 = OpConstantNull %6
+%20 = OpConstant %5 0
+%22 = OpTypePointer StorageBuffer %5
+%27 = OpTypePointer StorageBuffer %6
 )";
     auto got_types = DumpInstructions(b.types());
     EXPECT_EQ(expected_types, got_types);
 
-    auto* expected_instructions = R"(OpStore %11 %10
-OpStore %15 %14
-%22 = OpAccessChain %21 %1 %19
-%23 = OpLoad %4 %11
-OpAtomicStore %22 %10 %19 %23
-%27 = OpAccessChain %26 %1 %10
-%28 = OpLoad %5 %15
-OpAtomicStore %27 %10 %19 %28
+    auto* expected_instructions = R"(OpStore %12 %11
+OpStore %16 %15
+%23 = OpAccessChain %22 %1 %20 %20
+%24 = OpLoad %5 %12
+OpAtomicStore %23 %11 %20 %24
+%28 = OpAccessChain %27 %1 %20 %11
+%29 = OpLoad %6 %16
+OpAtomicStore %28 %11 %20 %29
 OpReturn
 )";
     auto got_instructions = DumpInstructions(b.functions()[0].instructions());
@@ -3353,8 +3702,8 @@ TEST_P(Builtin_Builder_AtomicRMW_i32, Test) {
     auto* s = Structure("S", utils::Vector{
                                  Member("v", ty.atomic<i32>()),
                              });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(1),
-              Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -3372,28 +3721,29 @@ TEST_P(Builtin_Builder_AtomicRMW_i32, Test) {
 
     ASSERT_EQ(b.functions().size(), 1_u);
 
-    std::string expected_types = R"(%4 = OpTypeInt 32 1
+    std::string expected_types = R"(%5 = OpTypeInt 32 1
+%4 = OpTypeStruct %5
 %3 = OpTypeStruct %4
 %2 = OpTypePointer StorageBuffer %3
 %1 = OpVariable %2 StorageBuffer
-%6 = OpTypeVoid
-%5 = OpTypeFunction %6
-%9 = OpConstant %4 10
-%11 = OpTypePointer Function %4
-%12 = OpConstantNull %4
-%14 = OpTypeInt 32 0
-%15 = OpConstant %14 1
-%16 = OpConstant %14 0
-%18 = OpTypePointer StorageBuffer %4
+%7 = OpTypeVoid
+%6 = OpTypeFunction %7
+%10 = OpConstant %5 10
+%12 = OpTypePointer Function %5
+%13 = OpConstantNull %5
+%15 = OpTypeInt 32 0
+%16 = OpConstant %15 1
+%17 = OpConstant %15 0
+%19 = OpTypePointer StorageBuffer %5
 )";
     auto got_types = DumpInstructions(b.types());
     EXPECT_EQ(expected_types, got_types);
 
-    std::string expected_instructions = R"(OpStore %10 %9
-%19 = OpAccessChain %18 %1 %16
-%20 = OpLoad %4 %10
+    std::string expected_instructions = R"(OpStore %11 %10
+%20 = OpAccessChain %19 %1 %17 %17
+%21 = OpLoad %5 %11
 )";
-    expected_instructions += "%13 = " + GetParam().op + " %4 %19 %15 %16 %20\n";
+    expected_instructions += "%14 = " + GetParam().op + " %5 %20 %16 %17 %21\n";
     expected_instructions += "OpReturn\n";
 
     auto got_instructions = DumpInstructions(b.functions()[0].instructions());
@@ -3425,8 +3775,8 @@ TEST_P(Builtin_Builder_AtomicRMW_u32, Test) {
     auto* s = Structure("S", utils::Vector{
                                  Member("v", ty.atomic<u32>()),
                              });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(1),
-              Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -3444,27 +3794,28 @@ TEST_P(Builtin_Builder_AtomicRMW_u32, Test) {
 
     ASSERT_EQ(b.functions().size(), 1_u);
 
-    std::string expected_types = R"(%4 = OpTypeInt 32 0
+    std::string expected_types = R"(%5 = OpTypeInt 32 0
+%4 = OpTypeStruct %5
 %3 = OpTypeStruct %4
 %2 = OpTypePointer StorageBuffer %3
 %1 = OpVariable %2 StorageBuffer
-%6 = OpTypeVoid
-%5 = OpTypeFunction %6
-%9 = OpConstant %4 10
-%11 = OpTypePointer Function %4
-%12 = OpConstantNull %4
-%14 = OpConstant %4 1
-%15 = OpConstant %4 0
-%17 = OpTypePointer StorageBuffer %4
+%7 = OpTypeVoid
+%6 = OpTypeFunction %7
+%10 = OpConstant %5 10
+%12 = OpTypePointer Function %5
+%13 = OpConstantNull %5
+%15 = OpConstant %5 1
+%16 = OpConstant %5 0
+%18 = OpTypePointer StorageBuffer %5
 )";
     auto got_types = DumpInstructions(b.types());
     EXPECT_EQ(expected_types, got_types);
 
-    std::string expected_instructions = R"(OpStore %10 %9
-%18 = OpAccessChain %17 %1 %15
-%19 = OpLoad %4 %10
+    std::string expected_instructions = R"(OpStore %11 %10
+%19 = OpAccessChain %18 %1 %16 %16
+%20 = OpLoad %5 %11
 )";
-    expected_instructions += "%13 = " + GetParam().op + " %4 %18 %14 %15 %19\n";
+    expected_instructions += "%14 = " + GetParam().op + " %5 %19 %15 %16 %20\n";
     expected_instructions += "OpReturn\n";
 
     auto got_instructions = DumpInstructions(b.functions()[0].instructions());
@@ -3499,8 +3850,8 @@ TEST_F(BuiltinBuilderTest, Call_AtomicExchange) {
                                  Member("u", ty.atomic<u32>()),
                                  Member("i", ty.atomic<i32>()),
                              });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(1),
-              Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -3521,35 +3872,36 @@ TEST_F(BuiltinBuilderTest, Call_AtomicExchange) {
 
     ASSERT_EQ(b.functions().size(), 1_u);
 
-    auto* expected_types = R"(%4 = OpTypeInt 32 0
-%5 = OpTypeInt 32 1
-%3 = OpTypeStruct %4 %5
+    auto* expected_types = R"(%5 = OpTypeInt 32 0
+%6 = OpTypeInt 32 1
+%4 = OpTypeStruct %5 %6
+%3 = OpTypeStruct %4
 %2 = OpTypePointer StorageBuffer %3
 %1 = OpVariable %2 StorageBuffer
-%7 = OpTypeVoid
-%6 = OpTypeFunction %7
-%10 = OpConstant %4 10
-%12 = OpTypePointer Function %4
-%13 = OpConstantNull %4
-%14 = OpConstant %5 10
-%16 = OpTypePointer Function %5
-%17 = OpConstantNull %5
-%19 = OpConstant %4 1
-%20 = OpConstant %4 0
-%22 = OpTypePointer StorageBuffer %4
-%27 = OpTypePointer StorageBuffer %5
+%8 = OpTypeVoid
+%7 = OpTypeFunction %8
+%11 = OpConstant %5 10
+%13 = OpTypePointer Function %5
+%14 = OpConstantNull %5
+%15 = OpConstant %6 10
+%17 = OpTypePointer Function %6
+%18 = OpConstantNull %6
+%20 = OpConstant %5 1
+%21 = OpConstant %5 0
+%23 = OpTypePointer StorageBuffer %5
+%28 = OpTypePointer StorageBuffer %6
 )";
     auto got_types = DumpInstructions(b.types());
     EXPECT_EQ(expected_types, got_types);
 
-    auto* expected_instructions = R"(OpStore %11 %10
-OpStore %15 %14
-%23 = OpAccessChain %22 %1 %20
-%24 = OpLoad %4 %11
-%18 = OpAtomicExchange %4 %23 %19 %20 %24
-%28 = OpAccessChain %27 %1 %19
-%29 = OpLoad %5 %15
-%25 = OpAtomicExchange %5 %28 %19 %20 %29
+    auto* expected_instructions = R"(OpStore %12 %11
+OpStore %16 %15
+%24 = OpAccessChain %23 %1 %21 %21
+%25 = OpLoad %5 %12
+%19 = OpAtomicExchange %5 %24 %20 %21 %25
+%29 = OpAccessChain %28 %1 %21 %20
+%30 = OpLoad %6 %16
+%26 = OpAtomicExchange %6 %29 %20 %21 %30
 OpReturn
 )";
     auto got_instructions = DumpInstructions(b.functions()[0].instructions());
@@ -3574,8 +3926,8 @@ TEST_F(BuiltinBuilderTest, Call_AtomicCompareExchangeWeak) {
                                  Member("u", ty.atomic<u32>()),
                                  Member("i", ty.atomic<i32>()),
                              });
-    GlobalVar("b", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(1),
-              Group(2));
+    GlobalVar("b", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(1_a),
+              Group(2_a));
 
     Func("a_func", utils::Empty, ty.void_(),
          utils::Vector{
@@ -3594,36 +3946,37 @@ TEST_F(BuiltinBuilderTest, Call_AtomicCompareExchangeWeak) {
 
     ASSERT_EQ(b.functions().size(), 1_u);
 
-    auto* expected_types = R"(%4 = OpTypeInt 32 0
-%5 = OpTypeInt 32 1
-%3 = OpTypeStruct %4 %5
+    auto* expected_types = R"(%5 = OpTypeInt 32 0
+%6 = OpTypeInt 32 1
+%4 = OpTypeStruct %5 %6
+%3 = OpTypeStruct %4
 %2 = OpTypePointer StorageBuffer %3
 %1 = OpVariable %2 StorageBuffer
-%7 = OpTypeVoid
-%6 = OpTypeFunction %7
-%12 = OpTypeBool
-%11 = OpTypeStruct %4 %12
-%13 = OpConstant %4 1
-%14 = OpConstant %4 0
-%16 = OpTypePointer StorageBuffer %4
-%18 = OpConstant %4 20
-%19 = OpConstant %4 10
-%23 = OpTypeStruct %5 %12
-%25 = OpTypePointer StorageBuffer %5
-%27 = OpConstant %5 20
-%28 = OpConstant %5 10
+%8 = OpTypeVoid
+%7 = OpTypeFunction %8
+%13 = OpTypeBool
+%12 = OpTypeStruct %5 %13
+%14 = OpConstant %5 1
+%15 = OpConstant %5 0
+%17 = OpTypePointer StorageBuffer %5
+%19 = OpConstant %5 20
+%20 = OpConstant %5 10
+%24 = OpTypeStruct %6 %13
+%26 = OpTypePointer StorageBuffer %6
+%28 = OpConstant %6 20
+%29 = OpConstant %6 10
 )";
     auto got_types = DumpInstructions(b.types());
     EXPECT_EQ(expected_types, got_types);
 
-    auto* expected_instructions = R"(%17 = OpAccessChain %16 %1 %14
-%20 = OpAtomicCompareExchange %4 %17 %13 %14 %14 %18 %19
-%21 = OpIEqual %12 %20 %18
-%10 = OpCompositeConstruct %11 %20 %21
-%26 = OpAccessChain %25 %1 %13
-%29 = OpAtomicCompareExchange %5 %26 %13 %14 %14 %27 %28
-%30 = OpIEqual %12 %29 %27
-%22 = OpCompositeConstruct %23 %29 %30
+    auto* expected_instructions = R"(%18 = OpAccessChain %17 %1 %15 %15
+%21 = OpAtomicCompareExchange %5 %18 %14 %15 %15 %19 %20
+%22 = OpIEqual %13 %21 %20
+%11 = OpCompositeConstruct %12 %21 %22
+%27 = OpAccessChain %26 %1 %15 %14
+%30 = OpAtomicCompareExchange %6 %27 %14 %15 %15 %28 %29
+%31 = OpIEqual %13 %30 %29
+%23 = OpCompositeConstruct %24 %30 %31
 OpReturn
 )";
     auto got_instructions = DumpInstructions(b.functions()[0].instructions());

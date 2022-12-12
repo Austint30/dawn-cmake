@@ -387,16 +387,6 @@ void DawnTestEnvironment::SelectPreferredAdapterProperties(const dawn::native::I
                 (properties.backendType == wgpu::BackendType::Null);
         }
 
-#if DAWN_PLATFORM_IS(WINDOWS)
-        if (selected && !mRunSuppressedTests &&
-            properties.backendType == wgpu::BackendType::Vulkan &&
-            gpu_info::IsIntel(properties.vendorID)) {
-            dawn::WarningLog()
-                << "Deselecting Windows Intel Vulkan adapter. See https://crbug.com/1338622.";
-            selected &= false;
-        }
-#endif
-
         // In Windows Remote Desktop sessions we may be able to discover multiple adapters that
         // have the same name and backend type. We will just choose one adapter from them in our
         // tests.
@@ -667,6 +657,10 @@ bool DawnTestBase::IsAMD() const {
     return gpu_info::IsAMD(mParam.adapterProperties.vendorID);
 }
 
+bool DawnTestBase::IsApple() const {
+    return gpu_info::IsApple(mParam.adapterProperties.vendorID);
+}
+
 bool DawnTestBase::IsARM() const {
     return gpu_info::IsARM(mParam.adapterProperties.vendorID);
 }
@@ -696,9 +690,21 @@ bool DawnTestBase::IsANGLE() const {
     return !mParam.adapterProperties.adapterName.find("ANGLE");
 }
 
+bool DawnTestBase::IsANGLESwiftShader() const {
+    return !mParam.adapterProperties.adapterName.find("ANGLE") &&
+           (mParam.adapterProperties.adapterName.find("SwiftShader") != std::string::npos);
+}
+
 bool DawnTestBase::IsWARP() const {
     return gpu_info::IsMicrosoftWARP(mParam.adapterProperties.vendorID,
                                      mParam.adapterProperties.deviceID);
+}
+
+bool DawnTestBase::IsIntelGen12() const {
+    return gpu_info::IsIntelGen12LP(mParam.adapterProperties.vendorID,
+                                    mParam.adapterProperties.deviceID) ||
+           gpu_info::IsIntelGen12HP(mParam.adapterProperties.vendorID,
+                                    mParam.adapterProperties.deviceID);
 }
 
 bool DawnTestBase::IsWindows() const {
@@ -726,6 +732,14 @@ bool DawnTestBase::IsMacOS(int32_t majorVersion, int32_t minorVersion) const {
     GetMacOSVersion(&majorVersionOut, &minorVersionOut);
     return (majorVersion != -1 && majorVersion == majorVersionOut) &&
            (minorVersion != -1 && minorVersion == minorVersionOut);
+#else
+    return false;
+#endif
+}
+
+bool DawnTestBase::IsAndroid() const {
+#if DAWN_PLATFORM_IS(ANDROID)
+    return true;
 #else
     return false;
 #endif
@@ -996,7 +1010,7 @@ void DawnTestBase::LoseDeviceForTesting(wgpu::Device device) {
     EXPECT_CALL(mDeviceLostCallback,
                 Call(WGPUDeviceLostReason_Undefined, testing::_, resolvedDevice.Get()))
         .Times(1);
-    resolvedDevice.LoseForTesting();
+    resolvedDevice.ForceLoss(wgpu::DeviceLostReason::Undefined, "Device lost for testing");
 }
 
 std::ostringstream& DawnTestBase::AddBufferExpectation(const char* file,
@@ -1006,7 +1020,7 @@ std::ostringstream& DawnTestBase::AddBufferExpectation(const char* file,
                                                        uint64_t size,
                                                        detail::Expectation* expectation) {
     uint64_t alignedSize = Align(size, uint64_t(4));
-    auto readback = ReserveReadback(alignedSize);
+    auto readback = ReserveReadback(device, alignedSize);
 
     // We need to enqueue the copy immediately because by the time we resolve the expectation,
     // the buffer might have been modified.
@@ -1031,6 +1045,7 @@ std::ostringstream& DawnTestBase::AddBufferExpectation(const char* file,
 
 std::ostringstream& DawnTestBase::AddTextureExpectationImpl(const char* file,
                                                             int line,
+                                                            wgpu::Device targetDevice,
                                                             detail::Expectation* expectation,
                                                             const wgpu::Texture& texture,
                                                             wgpu::Origin3D origin,
@@ -1039,6 +1054,8 @@ std::ostringstream& DawnTestBase::AddTextureExpectationImpl(const char* file,
                                                             wgpu::TextureAspect aspect,
                                                             uint32_t dataSize,
                                                             uint32_t bytesPerRow) {
+    ASSERT(targetDevice != nullptr);
+
     if (bytesPerRow == 0) {
         bytesPerRow = Align(extent.width * dataSize, kTextureBytesPerRowAlignment);
     } else {
@@ -1050,7 +1067,7 @@ std::ostringstream& DawnTestBase::AddTextureExpectationImpl(const char* file,
     uint32_t size = utils::RequiredBytesInCopy(bytesPerRow, rowsPerImage, extent.width,
                                                extent.height, extent.depthOrArrayLayers, dataSize);
 
-    auto readback = ReserveReadback(Align(size, 4));
+    auto readback = ReserveReadback(targetDevice, Align(size, 4));
 
     // We need to enqueue the copy immediately because by the time we resolve the expectation,
     // the texture might have been modified.
@@ -1059,11 +1076,11 @@ std::ostringstream& DawnTestBase::AddTextureExpectationImpl(const char* file,
     wgpu::ImageCopyBuffer imageCopyBuffer =
         utils::CreateImageCopyBuffer(readback.buffer, readback.offset, bytesPerRow, rowsPerImage);
 
-    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::CommandEncoder encoder = targetDevice.CreateCommandEncoder();
     encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &extent);
 
     wgpu::CommandBuffer commands = encoder.Finish();
-    queue.Submit(1, &commands);
+    targetDevice.GetQueue().Submit(1, &commands);
 
     DeferredExpectation deferred;
     deferred.file = file;
@@ -1088,7 +1105,7 @@ std::ostringstream& DawnTestBase::ExpectSampledFloatDataImpl(wgpu::TextureView t
                                                              uint32_t sampleCount,
                                                              detail::Expectation* expectation) {
     std::ostringstream shaderSource;
-    shaderSource << "let width : u32 = " << width << "u;\n";
+    shaderSource << "const width : u32 = " << width << "u;\n";
     shaderSource << "@group(0) @binding(0) var tex : " << wgslTextureType << ";\n";
     shaderSource << R"(
         struct Result {
@@ -1096,8 +1113,8 @@ std::ostringstream& DawnTestBase::ExpectSampledFloatDataImpl(wgpu::TextureView t
         }
         @group(0) @binding(1) var<storage, read_write> result : Result;
     )";
-    shaderSource << "let componentCount : u32 = " << componentCount << "u;\n";
-    shaderSource << "let sampleCount : u32 = " << sampleCount << "u;\n";
+    shaderSource << "const componentCount : u32 = " << componentCount << "u;\n";
+    shaderSource << "const sampleCount : u32 = " << sampleCount << "u;\n";
 
     shaderSource << "fn doTextureLoad(t: " << wgslTextureType
                  << ", coord: vec2<i32>, sample: u32, component: u32) -> f32";
@@ -1357,9 +1374,12 @@ std::ostringstream& DawnTestBase::ExpectAttachmentDepthStencilTestData(
     return EXPECT_TEXTURE_EQ(colorData.data(), colorTexture, {0, 0}, {width, height});
 }
 
-void DawnTestBase::WaitABit() {
-    if (device) {
-        device.Tick();
+void DawnTestBase::WaitABit(wgpu::Device targetDevice) {
+    if (targetDevice == nullptr) {
+        targetDevice = this->device;
+    }
+    if (targetDevice != nullptr) {
+        targetDevice.Tick();
     }
     FlushWire();
 
@@ -1385,18 +1405,21 @@ void DawnTestBase::WaitForAllOperations() {
     }
 }
 
-DawnTestBase::ReadbackReservation DawnTestBase::ReserveReadback(uint64_t readbackSize) {
+DawnTestBase::ReadbackReservation DawnTestBase::ReserveReadback(wgpu::Device targetDevice,
+                                                                uint64_t readbackSize) {
     ReadbackSlot slot;
+    slot.device = targetDevice;
     slot.bufferSize = readbackSize;
 
     // Create and initialize the slot buffer so that it won't unexpectedly affect the count of
     // resource lazy clear in the tests.
     const std::vector<uint8_t> initialBufferData(readbackSize, 0u);
     slot.buffer =
-        utils::CreateBufferFromData(device, initialBufferData.data(), readbackSize,
+        utils::CreateBufferFromData(targetDevice, initialBufferData.data(), readbackSize,
                                     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst);
 
     ReadbackReservation reservation;
+    reservation.device = targetDevice;
     reservation.buffer = slot.buffer;
     reservation.slot = mReadbackSlots.size();
     reservation.offset = 0;
@@ -1410,6 +1433,8 @@ void DawnTestBase::MapSlotsSynchronously() {
     // immediately.
     mNumPendingMapOperations = mReadbackSlots.size();
 
+    std::vector<wgpu::Device> pendingDevices;
+
     // Map all readback slots
     for (size_t i = 0; i < mReadbackSlots.size(); ++i) {
         MapReadUserdata* userdata = new MapReadUserdata{this, i};
@@ -1417,11 +1442,15 @@ void DawnTestBase::MapSlotsSynchronously() {
         const ReadbackSlot& slot = mReadbackSlots[i];
         slot.buffer.MapAsync(wgpu::MapMode::Read, 0, wgpu::kWholeMapSize, SlotMapCallback,
                              userdata);
+
+        pendingDevices.push_back(slot.device);
     }
 
     // Busy wait until all map operations are done.
     while (mNumPendingMapOperations != 0) {
-        WaitABit();
+        for (const wgpu::Device& device : pendingDevices) {
+            WaitABit(device);
+        }
     }
 }
 
@@ -1543,6 +1572,20 @@ testing::AssertionResult CheckImpl(const T& expected, const U& actual, const T& 
 }
 
 template <>
+testing::AssertionResult CheckImpl<utils::RGBA8>(const utils::RGBA8& expected,
+                                                 const utils::RGBA8& actual,
+                                                 const utils::RGBA8& tolerance) {
+    if (abs(expected.r - actual.r) > tolerance.r || abs(expected.g - actual.g) > tolerance.g ||
+        abs(expected.b - actual.b) > tolerance.b || abs(expected.a - actual.a) > tolerance.a) {
+        return tolerance == utils::RGBA8{}
+                   ? testing::AssertionFailure() << expected << ", actual " << actual
+                   : testing::AssertionFailure()
+                         << "within " << tolerance << " of " << expected << ", actual " << actual;
+    }
+    return testing::AssertionSuccess();
+}
+
+template <>
 testing::AssertionResult CheckImpl<float>(const float& expected,
                                           const float& actual,
                                           const float& tolerance) {
@@ -1550,6 +1593,18 @@ testing::AssertionResult CheckImpl<float>(const float& expected,
         return tolerance == 0.0 ? testing::AssertionFailure() << expected << ", actual " << actual
                                 : testing::AssertionFailure() << "within " << tolerance << " of "
                                                               << expected << ", actual " << actual;
+    }
+    return testing::AssertionSuccess();
+}
+
+template <>
+testing::AssertionResult CheckImpl<uint16_t>(const uint16_t& expected,
+                                             const uint16_t& actual,
+                                             const uint16_t& tolerance) {
+    if (abs(static_cast<int32_t>(expected) - static_cast<int32_t>(actual)) > tolerance) {
+        return tolerance == 0 ? testing::AssertionFailure() << expected << ", actual " << actual
+                              : testing::AssertionFailure() << "within " << tolerance << " of "
+                                                            << expected << ", actual " << actual;
     }
     return testing::AssertionSuccess();
 }

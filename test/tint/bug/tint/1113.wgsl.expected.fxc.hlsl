@@ -1,7 +1,3 @@
-uint value_or_one_if_zero_uint(uint value) {
-  return value == 0u ? 1u : value;
-}
-
 cbuffer cbuffer_uniforms : register(b0, space0) {
   uint4 uniforms[3];
 };
@@ -28,10 +24,18 @@ uint toIndex1D(uint gridSize, float3 voxelPos) {
   return ((icoord.x + (gridSize * icoord.y)) + ((gridSize * gridSize) * icoord.z));
 }
 
+uint tint_div(uint lhs, uint rhs) {
+  return (lhs / ((rhs == 0u) ? 1u : rhs));
+}
+
+uint tint_mod(uint lhs, uint rhs) {
+  return (lhs % ((rhs == 0u) ? 1u : rhs));
+}
+
 uint3 toIndex3D(uint gridSize, uint index) {
-  uint z_1 = (index / value_or_one_if_zero_uint((gridSize * gridSize)));
-  uint y_1 = ((index - ((gridSize * gridSize) * z_1)) / (gridSize == 0u ? 1u : gridSize));
-  uint x_1 = (index % (gridSize == 0u ? 1u : gridSize));
+  uint z_1 = tint_div(index, (gridSize * gridSize));
+  uint y_1 = tint_div((index - ((gridSize * gridSize) * z_1)), gridSize);
+  uint x_1 = tint_mod(index, gridSize);
   return uint3(x_1, y_1, z_1);
 }
 

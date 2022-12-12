@@ -115,20 +115,32 @@ MaybeError ValidateVertexBufferLayout(
 
 MaybeError ValidateVertexState(DeviceBase* device,
                                const VertexState* descriptor,
-                               const PipelineLayoutBase* layout) {
+                               const PipelineLayoutBase* layout,
+                               wgpu::PrimitiveTopology primitiveTopology) {
     DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain must be nullptr.");
 
-    DAWN_INVALID_IF(descriptor->bufferCount > kMaxVertexBuffers,
+    const CombinedLimits& limits = device->GetLimits();
+
+    DAWN_INVALID_IF(descriptor->bufferCount > limits.v1.maxVertexBuffers,
                     "Vertex buffer count (%u) exceeds the maximum number of vertex buffers (%u).",
-                    descriptor->bufferCount, kMaxVertexBuffers);
+                    descriptor->bufferCount, limits.v1.maxVertexBuffers);
 
     DAWN_TRY_CONTEXT(ValidateProgrammableStage(device, descriptor->module, descriptor->entryPoint,
                                                descriptor->constantCount, descriptor->constants,
                                                layout, SingleShaderStage::Vertex),
-                     "validating vertex stage (module: %s, entryPoint: %s).", descriptor->module,
+                     "validating vertex stage (%s, entryPoint: %s).", descriptor->module,
                      descriptor->entryPoint);
     const EntryPointMetadata& vertexMetadata =
         descriptor->module->GetEntryPoint(descriptor->entryPoint);
+    if (primitiveTopology == wgpu::PrimitiveTopology::PointList) {
+        DAWN_INVALID_IF(
+            vertexMetadata.totalInterStageShaderComponents + 1 >
+                limits.v1.maxInterStageShaderComponents,
+            "Total vertex output components count (%u) exceeds the maximum (%u) when primitive "
+            "topology is %s as another component is implicitly used for the point size.",
+            vertexMetadata.totalInterStageShaderComponents,
+            limits.v1.maxInterStageShaderComponents - 1, primitiveTopology);
+    }
 
     ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes> attributesSetMask;
     uint32_t totalAttributesNum = 0;
@@ -156,7 +168,7 @@ MaybeError ValidatePrimitiveState(const DeviceBase* device, const PrimitiveState
     DAWN_TRY(ValidateSingleSType(descriptor->nextInChain, wgpu::SType::PrimitiveDepthClipControl));
     const PrimitiveDepthClipControl* depthClipControl = nullptr;
     FindInChain(descriptor->nextInChain, &depthClipControl);
-    DAWN_INVALID_IF(depthClipControl && !device->IsFeatureEnabled(Feature::DepthClipControl),
+    DAWN_INVALID_IF(depthClipControl && !device->HasFeature(Feature::DepthClipControl),
                     "%s is not supported", wgpu::FeatureName::DepthClipControl);
     DAWN_TRY(ValidatePrimitiveTopology(descriptor->topology));
     DAWN_TRY(ValidateIndexFormat(descriptor->stripIndexFormat));
@@ -177,9 +189,7 @@ MaybeError ValidatePrimitiveState(const DeviceBase* device, const PrimitiveState
 
 MaybeError ValidateDepthStencilState(const DeviceBase* device,
                                      const DepthStencilState* descriptor) {
-    if (descriptor->nextInChain != nullptr) {
-        return DAWN_VALIDATION_ERROR("nextInChain must be nullptr");
-    }
+    DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain is not nullptr.");
 
     DAWN_TRY(ValidateCompareFunction(descriptor->depthCompare));
     DAWN_TRY(ValidateCompareFunction(descriptor->stencilFront.compare));
@@ -331,7 +341,7 @@ MaybeError ValidateFragmentState(DeviceBase* device,
     DAWN_TRY_CONTEXT(ValidateProgrammableStage(device, descriptor->module, descriptor->entryPoint,
                                                descriptor->constantCount, descriptor->constants,
                                                layout, SingleShaderStage::Fragment),
-                     "validating fragment stage (module: %s, entryPoint: %s).", descriptor->module,
+                     "validating fragment stage (%s, entryPoint: %s).", descriptor->module,
                      descriptor->entryPoint);
 
     uint32_t maxColorAttachments = device->GetLimits().v1.maxColorAttachments;
@@ -372,13 +382,24 @@ MaybeError ValidateInterStageMatching(DeviceBase* device,
     const EntryPointMetadata& fragmentMetadata =
         fragmentState.module->GetEntryPoint(fragmentState.entryPoint);
 
-    // TODO(dawn:563): Can this message give more details?
-    DAWN_INVALID_IF(
-        vertexMetadata.usedInterStageVariables != fragmentMetadata.usedInterStageVariables,
-        "One or more fragment inputs and vertex outputs are not one-to-one matching");
+    if (DAWN_UNLIKELY(
+            (vertexMetadata.usedInterStageVariables | fragmentMetadata.usedInterStageVariables) !=
+            vertexMetadata.usedInterStageVariables)) {
+        for (size_t i : IterateBitSet(fragmentMetadata.usedInterStageVariables)) {
+            if (!vertexMetadata.usedInterStageVariables.test(i)) {
+                return DAWN_VALIDATION_ERROR(
+                    "The fragment input at location %u doesn't have a corresponding vertex output.",
+                    i);
+            }
+        }
+        UNREACHABLE();
+    }
 
-    // TODO(dawn:802): Validate interpolation types and interpolition sampling types
     for (size_t i : IterateBitSet(vertexMetadata.usedInterStageVariables)) {
+        if (!fragmentMetadata.usedInterStageVariables.test(i)) {
+            // It is valid that fragment output is a subset of vertex input
+            continue;
+        }
         const auto& vertexOutputInfo = vertexMetadata.interStageVariables[i];
         const auto& fragmentInputInfo = fragmentMetadata.interStageVariables[i];
         DAWN_INVALID_IF(
@@ -436,7 +457,8 @@ MaybeError ValidateRenderPipelineDescriptor(DeviceBase* device,
         DAWN_TRY(device->ValidateObject(descriptor->layout));
     }
 
-    DAWN_TRY_CONTEXT(ValidateVertexState(device, &descriptor->vertex, descriptor->layout),
+    DAWN_TRY_CONTEXT(ValidateVertexState(device, &descriptor->vertex, descriptor->layout,
+                                         descriptor->primitive.topology),
                      "validating vertex state.");
 
     DAWN_TRY_CONTEXT(ValidatePrimitiveState(device, &descriptor->primitive),
@@ -619,14 +641,14 @@ RenderPipelineBase::RenderPipelineBase(DeviceBase* device,
     }
 
     SetContentHash(ComputeContentHash());
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 
     // Initialize the cache key to include the cache type and device information.
     StreamIn(&mCacheKey, CacheKey::Type::RenderPipeline, device->GetCacheKey());
 }
 
 RenderPipelineBase::RenderPipelineBase(DeviceBase* device) : PipelineBase(device) {
-    TrackInDevice();
+    GetObjectTrackingList()->Track(this);
 }
 
 RenderPipelineBase::RenderPipelineBase(DeviceBase* device, ObjectBase::ErrorTag tag)

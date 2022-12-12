@@ -17,16 +17,21 @@
 
 #include <functional>
 #include <memory>
+#include <ostream>
 #include <string>
+#include <tuple>
+#include <utility>
+#include <variant>
 
 #include "gtest/gtest.h"
 #include "src/tint/program_builder.h"
 #include "src/tint/resolver/resolver.h"
-#include "src/tint/sem/abstract_float.h"
-#include "src/tint/sem/abstract_int.h"
 #include "src/tint/sem/expression.h"
 #include "src/tint/sem/statement.h"
 #include "src/tint/sem/variable.h"
+#include "src/tint/traits.h"
+#include "src/tint/type/abstract_float.h"
+#include "src/tint/type/abstract_int.h"
 #include "src/tint/utils/vector.h"
 
 namespace tint::resolver {
@@ -109,7 +114,7 @@ class TestHelper : public ProgramBuilder {
     /// @param type a type
     /// @returns the name for `type` that closely resembles how it would be
     /// declared in WGSL.
-    std::string FriendlyName(const sem::Type* type) { return type->FriendlyName(Symbols()); }
+    std::string FriendlyName(const type::Type* type) { return type->FriendlyName(Symbols()); }
 
   private:
     std::unique_ptr<Resolver> resolver_;
@@ -147,6 +152,12 @@ template <typename T>
 using mat3x2 = mat<3, 2, T>;
 
 template <typename T>
+using mat2x4 = mat<2, 4, T>;
+
+template <typename T>
+using mat4x2 = mat<4, 2, T>;
+
+template <typename T>
 using mat3x3 = mat<3, 3, T>;
 
 template <typename T>
@@ -170,20 +181,41 @@ using alias3 = alias<TO, 3>;
 template <typename TO>
 struct ptr {};
 
-using ast_type_func_ptr = const ast::Type* (*)(ProgramBuilder& b);
-using ast_expr_func_ptr = const ast::Expression* (*)(ProgramBuilder& b, double elem_value);
-using sem_type_func_ptr = const sem::Type* (*)(ProgramBuilder& b);
+/// A scalar value
+using Scalar = std::variant<i32, u32, f32, f16, AInt, AFloat, bool>;
 
+/// Returns current variant value in `s` cast to type `T`
 template <typename T>
-struct DataType {};
+T As(const Scalar& s) {
+    return std::visit([](auto&& v) { return static_cast<T>(v); }, s);
+}
+
+using ast_type_func_ptr = const ast::Type* (*)(ProgramBuilder& b);
+using ast_expr_func_ptr = const ast::Expression* (*)(ProgramBuilder& b,
+                                                     utils::VectorRef<Scalar> args);
+using ast_expr_from_double_func_ptr = const ast::Expression* (*)(ProgramBuilder& b, double v);
+using sem_type_func_ptr = const type::Type* (*)(ProgramBuilder& b);
+using type_name_func_ptr = std::string (*)();
+
+struct UnspecializedElementType {};
+
+/// Base template for DataType, specialized below.
+template <typename T>
+struct DataType {
+    /// The element type
+    using ElementType = UnspecializedElementType;
+};
 
 /// Helper that represents no-type. Returns nullptr for all static methods.
 template <>
 struct DataType<void> {
+    /// The element type
+    using ElementType = void;
+
     /// @return nullptr
     static inline const ast::Type* AST(ProgramBuilder&) { return nullptr; }
     /// @return nullptr
-    static inline const sem::Type* Sem(ProgramBuilder&) { return nullptr; }
+    static inline const type::Type* Sem(ProgramBuilder&) { return nullptr; }
 };
 
 /// Helper for building bool types and expressions
@@ -200,12 +232,18 @@ struct DataType<bool> {
     static inline const ast::Type* AST(ProgramBuilder& b) { return b.ty.bool_(); }
     /// @param b the ProgramBuilder
     /// @return the semantic bool type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::Bool>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return b.create<type::Bool>(); }
     /// @param b the ProgramBuilder
-    /// @param elem_value the b
+    /// @param args args of size 1 with the boolean value to init with
     /// @return a new AST expression of the bool type
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(std::equal_to<double>()(elem_value, 0));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<bool>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to bool.
+    /// @return a new AST expression of the bool type
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "bool"; }
@@ -225,12 +263,18 @@ struct DataType<i32> {
     static inline const ast::Type* AST(ProgramBuilder& b) { return b.ty.i32(); }
     /// @param b the ProgramBuilder
     /// @return the semantic i32 type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::I32>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return b.create<type::I32>(); }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value i32 will be initialized with
+    /// @param args args of size 1 with the i32 value to init with
     /// @return a new AST i32 literal value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(static_cast<i32>(elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<i32>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to i32.
+    /// @return a new AST i32 literal value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "i32"; }
@@ -250,12 +294,18 @@ struct DataType<u32> {
     static inline const ast::Type* AST(ProgramBuilder& b) { return b.ty.u32(); }
     /// @param b the ProgramBuilder
     /// @return the semantic u32 type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::U32>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return b.create<type::U32>(); }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value u32 will be initialized with
+    /// @param args args of size 1 with the u32 value to init with
     /// @return a new AST u32 literal value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(static_cast<u32>(elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<u32>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to u32.
+    /// @return a new AST u32 literal value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "u32"; }
@@ -275,12 +325,18 @@ struct DataType<f32> {
     static inline const ast::Type* AST(ProgramBuilder& b) { return b.ty.f32(); }
     /// @param b the ProgramBuilder
     /// @return the semantic f32 type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::F32>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return b.create<type::F32>(); }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value f32 will be initialized with
+    /// @param args args of size 1 with the f32 value to init with
     /// @return a new AST f32 literal value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(static_cast<f32>(elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<f32>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to f32.
+    /// @return a new AST f32 literal value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<f32>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "f32"; }
@@ -300,12 +356,18 @@ struct DataType<f16> {
     static inline const ast::Type* AST(ProgramBuilder& b) { return b.ty.f16(); }
     /// @param b the ProgramBuilder
     /// @return the semantic f16 type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::F16>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return b.create<type::F16>(); }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value f16 will be initialized with
+    /// @param args args of size 1 with the f16 value to init with
     /// @return a new AST f16 literal value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(static_cast<f16>(elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<f16>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to f16.
+    /// @return a new AST f16 literal value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "f16"; }
@@ -324,12 +386,20 @@ struct DataType<AFloat> {
     static inline const ast::Type* AST(ProgramBuilder&) { return nullptr; }
     /// @param b the ProgramBuilder
     /// @return the semantic abstract-float type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::AbstractFloat>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) {
+        return b.create<type::AbstractFloat>();
+    }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value the abstract-float literal will be constructed with
+    /// @param args args of size 1 with the abstract-float value to init with
     /// @return a new AST abstract-float literal value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(AFloat(elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<AFloat>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to AFloat.
+    /// @return a new AST abstract-float literal value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "abstract-float"; }
@@ -348,12 +418,18 @@ struct DataType<AInt> {
     static inline const ast::Type* AST(ProgramBuilder&) { return nullptr; }
     /// @param b the ProgramBuilder
     /// @return the semantic abstract-int type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return b.create<sem::AbstractInt>(); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return b.create<type::AbstractInt>(); }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value the abstract-int literal will be constructed with
+    /// @param args args of size 1 with the abstract-int value to init with
     /// @return a new AST abstract-int literal value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Expr(AInt(elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Expr(std::get<AInt>(args[0]));
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to AInt.
+    /// @return a new AST abstract-int literal value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "abstract-int"; }
@@ -375,26 +451,31 @@ struct DataType<vec<N, T>> {
     }
     /// @param b the ProgramBuilder
     /// @return the semantic vector type
-    static inline const sem::Type* Sem(ProgramBuilder& b) {
-        return b.create<sem::Vector>(DataType<T>::Sem(b), N);
+    static inline const type::Type* Sem(ProgramBuilder& b) {
+        return b.create<type::Vector>(DataType<T>::Sem(b), N);
     }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value each element in the vector will be initialized
-    /// with
+    /// @param args args of size 1 or N with values of type T to initialize with
     /// @return a new AST vector value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Construct(AST(b), ExprArgs(b, elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Construct(AST(b), ExprArgs(b, std::move(args)));
     }
-
     /// @param b the ProgramBuilder
-    /// @param elem_value the value each element will be initialized with
+    /// @param args args of size 1 or N with values of type T to initialize with
     /// @return the list of expressions that are used to construct the vector
-    static inline auto ExprArgs(ProgramBuilder& b, double elem_value) {
-        utils::Vector<const ast::Expression*, N> args;
-        for (uint32_t i = 0; i < N; i++) {
-            args.Push(DataType<T>::Expr(b, elem_value));
+    static inline auto ExprArgs(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        const bool one_value = args.Length() == 1;
+        utils::Vector<const ast::Expression*, N> r;
+        for (size_t i = 0; i < N; ++i) {
+            r.Push(DataType<T>::Expr(b, utils::Vector<Scalar, 1>{one_value ? args[0] : args[i]}));
         }
-        return args;
+        return r;
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to ElementType
+    /// @return a new AST vector value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() {
@@ -418,27 +499,41 @@ struct DataType<mat<N, M, T>> {
     }
     /// @param b the ProgramBuilder
     /// @return the semantic matrix type
-    static inline const sem::Type* Sem(ProgramBuilder& b) {
-        auto* column_type = b.create<sem::Vector>(DataType<T>::Sem(b), M);
-        return b.create<sem::Matrix>(column_type, N);
+    static inline const type::Type* Sem(ProgramBuilder& b) {
+        auto* column_type = b.create<type::Vector>(DataType<T>::Sem(b), M);
+        return b.create<type::Matrix>(column_type, N);
     }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value each element in the matrix will be initialized
-    /// with
+    /// @param args args of size 1 or N*M with values of type T to initialize with
     /// @return a new AST matrix value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Construct(AST(b), ExprArgs(b, elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Construct(AST(b), ExprArgs(b, std::move(args)));
     }
-
     /// @param b the ProgramBuilder
-    /// @param elem_value the value each element will be initialized with
-    /// @return the list of expressions that are used to construct the matrix
-    static inline auto ExprArgs(ProgramBuilder& b, double elem_value) {
-        utils::Vector<const ast::Expression*, N> args;
-        for (uint32_t i = 0; i < N; i++) {
-            args.Push(DataType<vec<M, T>>::Expr(b, elem_value));
+    /// @param args args of size 1 or N*M with values of type T to initialize with
+    /// @return a new AST matrix value expression
+    static inline auto ExprArgs(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        const bool one_value = args.Length() == 1;
+        size_t next = 0;
+        utils::Vector<const ast::Expression*, N> r;
+        for (uint32_t i = 0; i < N; ++i) {
+            if (one_value) {
+                r.Push(DataType<vec<M, T>>::Expr(b, utils::Vector<Scalar, 1>{args[0]}));
+            } else {
+                utils::Vector<Scalar, M> v;
+                for (size_t j = 0; j < M; ++j) {
+                    v.Push(args[next++]);
+                }
+                r.Push(DataType<vec<M, T>>::Expr(b, std::move(v)));
+            }
         }
-        return args;
+        return r;
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to ElementType
+    /// @return a new AST matrix value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() {
@@ -451,7 +546,7 @@ struct DataType<mat<N, M, T>> {
 template <typename T, int ID>
 struct DataType<alias<T, ID>> {
     /// The element type
-    using ElementType = T;
+    using ElementType = typename DataType<T>::ElementType;
 
     /// true if the aliased type is a composite type
     static constexpr bool is_composite = DataType<T>::is_composite;
@@ -468,27 +563,37 @@ struct DataType<alias<T, ID>> {
     }
     /// @param b the ProgramBuilder
     /// @return the semantic aliased type
-    static inline const sem::Type* Sem(ProgramBuilder& b) { return DataType<T>::Sem(b); }
+    static inline const type::Type* Sem(ProgramBuilder& b) { return DataType<T>::Sem(b); }
 
     /// @param b the ProgramBuilder
-    /// @param elem_value the value nested elements will be initialized with
+    /// @param args the value nested elements will be initialized with
     /// @return a new AST expression of the alias type
     template <bool IS_COMPOSITE = is_composite>
-    static inline traits::EnableIf<!IS_COMPOSITE, const ast::Expression*> Expr(ProgramBuilder& b,
-                                                                               double elem_value) {
+    static inline traits::EnableIf<!IS_COMPOSITE, const ast::Expression*> Expr(
+        ProgramBuilder& b,
+        utils::VectorRef<Scalar> args) {
         // Cast
-        return b.Construct(AST(b), DataType<T>::Expr(b, elem_value));
+        return b.Construct(AST(b), DataType<T>::Expr(b, std::move(args)));
     }
 
     /// @param b the ProgramBuilder
-    /// @param elem_value the value nested elements will be initialized with
+    /// @param args the value nested elements will be initialized with
     /// @return a new AST expression of the alias type
     template <bool IS_COMPOSITE = is_composite>
-    static inline traits::EnableIf<IS_COMPOSITE, const ast::Expression*> Expr(ProgramBuilder& b,
-                                                                              double elem_value) {
+    static inline traits::EnableIf<IS_COMPOSITE, const ast::Expression*> Expr(
+        ProgramBuilder& b,
+        utils::VectorRef<Scalar> args) {
         // Construct
-        return b.Construct(AST(b), DataType<T>::ExprArgs(b, elem_value));
+        return b.Construct(AST(b), DataType<T>::ExprArgs(b, std::move(args)));
     }
+
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to ElementType
+    /// @return a new AST expression of the alias type
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
+    }
+
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "alias_" + std::to_string(ID); }
 };
@@ -497,7 +602,7 @@ struct DataType<alias<T, ID>> {
 template <typename T>
 struct DataType<ptr<T>> {
     /// The element type
-    using ElementType = T;
+    using ElementType = typename DataType<T>::ElementType;
 
     /// true if the pointer type is a composite type
     static constexpr bool is_composite = false;
@@ -505,23 +610,32 @@ struct DataType<ptr<T>> {
     /// @param b the ProgramBuilder
     /// @return a new AST alias type
     static inline const ast::Type* AST(ProgramBuilder& b) {
-        return b.create<ast::Pointer>(DataType<T>::AST(b), ast::StorageClass::kPrivate,
-                                      ast::Access::kReadWrite);
+        return b.create<ast::Pointer>(DataType<T>::AST(b), ast::AddressSpace::kPrivate,
+                                      ast::Access::kUndefined);
     }
     /// @param b the ProgramBuilder
     /// @return the semantic aliased type
-    static inline const sem::Type* Sem(ProgramBuilder& b) {
-        return b.create<sem::Pointer>(DataType<T>::Sem(b), ast::StorageClass::kPrivate,
-                                      ast::Access::kReadWrite);
+    static inline const type::Type* Sem(ProgramBuilder& b) {
+        return b.create<type::Pointer>(DataType<T>::Sem(b), ast::AddressSpace::kPrivate,
+                                       ast::Access::kReadWrite);
     }
 
     /// @param b the ProgramBuilder
-    /// @return a new AST expression of the alias type
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double /*unused*/) {
+    /// @return a new AST expression of the pointer type
+    static inline const ast::Expression* Expr(ProgramBuilder& b,
+                                              utils::VectorRef<Scalar> /*unused*/) {
         auto sym = b.Symbols().New("global_for_ptr");
-        b.GlobalVar(sym, DataType<T>::AST(b), ast::StorageClass::kPrivate);
+        b.GlobalVar(sym, DataType<T>::AST(b), ast::AddressSpace::kPrivate);
         return b.AddressOf(sym);
     }
+
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to ElementType
+    /// @return a new AST expression of the pointer type
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
+    }
+
     /// @returns the WGSL name for the type
     static inline std::string Name() { return "ptr<" + DataType<T>::Name() + ">"; }
 };
@@ -530,7 +644,7 @@ struct DataType<ptr<T>> {
 template <uint32_t N, typename T>
 struct DataType<array<N, T>> {
     /// The element type
-    using ElementType = T;
+    using ElementType = typename DataType<T>::ElementType;
 
     /// true as arrays are a composite type
     static constexpr bool is_composite = true;
@@ -545,33 +659,45 @@ struct DataType<array<N, T>> {
     }
     /// @param b the ProgramBuilder
     /// @return the semantic array type
-    static inline const sem::Type* Sem(ProgramBuilder& b) {
+    static inline const type::Type* Sem(ProgramBuilder& b) {
         auto* el = DataType<T>::Sem(b);
-        return b.create<sem::Array>(
+        const type::ArrayCount* count = nullptr;
+        if (N == 0) {
+            count = b.create<type::RuntimeArrayCount>();
+        } else {
+            count = b.create<type::ConstantArrayCount>(N);
+        }
+        return b.create<type::Array>(
             /* element */ el,
-            /* count */ N,
+            /* count */ count,
             /* align */ el->Align(),
             /* size */ N * el->Size(),
             /* stride */ el->Align(),
             /* implicit_stride */ el->Align());
     }
     /// @param b the ProgramBuilder
-    /// @param elem_value the value each element in the array will be initialized
+    /// @param args args of size 1 or N with values of type T to initialize with
     /// with
     /// @return a new AST array value expression
-    static inline const ast::Expression* Expr(ProgramBuilder& b, double elem_value) {
-        return b.Construct(AST(b), ExprArgs(b, elem_value));
+    static inline const ast::Expression* Expr(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        return b.Construct(AST(b), ExprArgs(b, std::move(args)));
     }
-
     /// @param b the ProgramBuilder
-    /// @param elem_value the value each element will be initialized with
+    /// @param args args of size 1 or N with values of type T to initialize with
     /// @return the list of expressions that are used to construct the array
-    static inline auto ExprArgs(ProgramBuilder& b, double elem_value) {
-        utils::Vector<const ast::Expression*, N> args;
+    static inline auto ExprArgs(ProgramBuilder& b, utils::VectorRef<Scalar> args) {
+        const bool one_value = args.Length() == 1;
+        utils::Vector<const ast::Expression*, N> r;
         for (uint32_t i = 0; i < N; i++) {
-            args.Push(DataType<T>::Expr(b, elem_value));
+            r.Push(DataType<T>::Expr(b, utils::Vector<Scalar, 1>{one_value ? args[0] : args[i]}));
         }
-        return args;
+        return r;
+    }
+    /// @param b the ProgramBuilder
+    /// @param v arg of type double that will be cast to ElementType
+    /// @return a new AST array value expression
+    static inline const ast::Expression* ExprFromDouble(ProgramBuilder& b, double v) {
+        return Expr(b, utils::Vector<Scalar, 1>{static_cast<ElementType>(v)});
     }
     /// @returns the WGSL name for the type
     static inline std::string Name() {
@@ -585,19 +711,170 @@ struct CreatePtrs {
     ast_type_func_ptr ast;
     /// ast expression type create function
     ast_expr_func_ptr expr;
+    /// ast expression type create function from double arg
+    ast_expr_from_double_func_ptr expr_from_double;
     /// sem type create function
     sem_type_func_ptr sem;
+    /// type name function
+    type_name_func_ptr name;
 };
+
+/// @param o the std::ostream to write to
+/// @param ptrs the CreatePtrs
+/// @return the std::ostream so calls can be chained
+inline std::ostream& operator<<(std::ostream& o, const CreatePtrs& ptrs) {
+    return o << (ptrs.name ? ptrs.name() : "<unknown>");
+}
 
 /// Returns a CreatePtrs struct instance with all creation pointer types for
 /// type `T`
 template <typename T>
 constexpr CreatePtrs CreatePtrsFor() {
-    return {DataType<T>::AST, DataType<T>::Expr, DataType<T>::Sem};
+    return {DataType<T>::AST, DataType<T>::Expr, DataType<T>::ExprFromDouble, DataType<T>::Sem,
+            DataType<T>::Name};
+}
+
+/// True if DataType<T> is specialized for T, false otherwise.
+template <typename T>
+const bool IsDataTypeSpecializedFor =
+    !std::is_same_v<typename DataType<T>::ElementType, UnspecializedElementType>;
+
+/// Value is used to create Values with a Scalar vector initializer.
+struct Value {
+    /// Creates a Value for type T initialized with `args`
+    /// @param args the scalar args
+    /// @returns Value
+    template <typename T>
+    static Value Create(utils::VectorRef<Scalar> args) {
+        static_assert(IsDataTypeSpecializedFor<T>, "No DataType<T> specialization exists");
+        using EL_TY = typename builder::DataType<T>::ElementType;
+        return Value{
+            std::move(args),         CreatePtrsFor<T>().expr,     tint::IsAbstract<EL_TY>,
+            tint::IsIntegral<EL_TY>, tint::FriendlyName<EL_TY>(),
+        };
+    }
+
+    /// Creates an `ast::Expression` for the type T passing in previously stored args
+    /// @param b the ProgramBuilder
+    /// @returns an expression node
+    const ast::Expression* Expr(ProgramBuilder& b) const { return (*create)(b, args); }
+
+    /// Prints this value to the output stream
+    /// @param o the output stream
+    /// @returns input argument `o`
+    std::ostream& Print(std::ostream& o) const {
+        o << type_name << "(";
+        for (auto& a : args) {
+            std::visit([&](auto& v) { o << v; }, a);
+            if (&a != &args.Back()) {
+                o << ", ";
+            }
+        }
+        o << ")";
+        return o;
+    }
+
+    /// The arguments used to construct the value
+    utils::Vector<Scalar, 4> args;
+    /// Function used to construct an expression with the given value
+    builder::ast_expr_func_ptr create;
+    /// True if the element type is abstract
+    bool is_abstract = false;
+    /// True if the element type is an integer
+    bool is_integral = false;
+    /// The name of the type.
+    const char* type_name = "<invalid>";
+};
+
+/// Prints Value to ostream
+inline std::ostream& operator<<(std::ostream& o, const Value& value) {
+    return value.Print(o);
+}
+
+/// True if T is Value, false otherwise
+template <typename T>
+constexpr bool IsValue = std::is_same_v<T, Value>;
+
+/// Creates a Value of DataType<T> from a scalar `v`
+template <typename T>
+Value Val(T v) {
+    static_assert(traits::IsTypeIn<T, Scalar>, "v must be a Number of bool");
+    return Value::Create<T>(utils::Vector<Scalar, 1>{v});
+}
+
+/// Creates a Value of DataType<vec<N, T>> from N scalar `args`
+template <typename... T>
+Value Vec(T... args) {
+    using FirstT = std::tuple_element_t<0, std::tuple<T...>>;
+    constexpr size_t N = sizeof...(args);
+    utils::Vector<Scalar, sizeof...(args)> v{args...};
+    return Value::Create<vec<N, FirstT>>(std::move(v));
+}
+
+/// Creates a Value of DataType<mat<C,R,T> from C*R scalar `args`
+template <size_t C, size_t R, typename T>
+Value Mat(const T (&m_in)[C][R]) {
+    utils::Vector<Scalar, C * R> m;
+    for (uint32_t i = 0; i < C; ++i) {
+        for (size_t j = 0; j < R; ++j) {
+            m.Push(m_in[i][j]);
+        }
+    }
+    return Value::Create<mat<C, R, T>>(std::move(m));
+}
+
+/// Creates a Value of DataType<mat<2,R,T> from column vectors `c0` and `c1`
+template <typename T, size_t R>
+Value Mat(const T (&c0)[R], const T (&c1)[R]) {
+    constexpr size_t C = 2;
+    utils::Vector<Scalar, C * R> m;
+    for (auto v : c0) {
+        m.Push(v);
+    }
+    for (auto v : c1) {
+        m.Push(v);
+    }
+    return Value::Create<mat<C, R, T>>(std::move(m));
+}
+
+/// Creates a Value of DataType<mat<3,R,T> from column vectors `c0`, `c1`, and `c2`
+template <typename T, size_t R>
+Value Mat(const T (&c0)[R], const T (&c1)[R], const T (&c2)[R]) {
+    constexpr size_t C = 3;
+    utils::Vector<Scalar, C * R> m;
+    for (auto v : c0) {
+        m.Push(v);
+    }
+    for (auto v : c1) {
+        m.Push(v);
+    }
+    for (auto v : c2) {
+        m.Push(v);
+    }
+    return Value::Create<mat<C, R, T>>(std::move(m));
+}
+
+/// Creates a Value of DataType<mat<4,R,T> from column vectors `c0`, `c1`, `c2`, and `c3`
+template <typename T, size_t R>
+Value Mat(const T (&c0)[R], const T (&c1)[R], const T (&c2)[R], const T (&c3)[R]) {
+    constexpr size_t C = 4;
+    utils::Vector<Scalar, C * R> m;
+    for (auto v : c0) {
+        m.Push(v);
+    }
+    for (auto v : c1) {
+        m.Push(v);
+    }
+    for (auto v : c2) {
+        m.Push(v);
+    }
+    for (auto v : c3) {
+        m.Push(v);
+    }
+    return Value::Create<mat<C, R, T>>(std::move(m));
 }
 
 }  // namespace builder
-
 }  // namespace tint::resolver
 
 #endif  // SRC_TINT_RESOLVER_RESOLVER_TEST_HELPER_H_

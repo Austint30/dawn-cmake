@@ -116,7 +116,7 @@ TEST_F(WgslGeneratorImplTest, Emit_Function_EntryPoint_Parameters) {
                         });
     auto* loc1 = Param("loc1", ty.f32(),
                        utils::Vector{
-                           Location(1u),
+                           Location(1_a),
                        });
     auto* func = Func("frag_main", utils::Vector{coord, loc1}, ty.void_(), utils::Empty,
                       utils::Vector{
@@ -143,7 +143,7 @@ TEST_F(WgslGeneratorImplTest, Emit_Function_EntryPoint_ReturnValue) {
                           Stage(ast::PipelineStage::kFragment),
                       },
                       utils::Vector{
-                          Location(1u),
+                          Location(1_a),
                       });
 
     GeneratorImpl& gen = Build();
@@ -179,8 +179,8 @@ TEST_F(WgslGeneratorImplTest, Emit_Function_Multiple_EntryPoint_With_Same_Module
                                     Member("d", ty.f32()),
                                 });
 
-    GlobalVar("data", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(0));
+    GlobalVar("data", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(0_a),
+              Group(0_a));
 
     {
         auto* var = Var("v", ty.f32(), MemberAccessor("data", "d"));

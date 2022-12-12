@@ -59,17 +59,18 @@ enum ResourceHeapKind {
 class ResourceAllocatorManager {
   public:
     explicit ResourceAllocatorManager(Device* device);
+    ~ResourceAllocatorManager();
 
     ResultOrError<ResourceHeapAllocation> AllocateMemory(
         D3D12_HEAP_TYPE heapType,
         const D3D12_RESOURCE_DESC& resourceDescriptor,
-        D3D12_RESOURCE_STATES initialUsage);
+        D3D12_RESOURCE_STATES initialUsage,
+        uint32_t formatBytesPerBlock,
+        bool forceAllocateAsCommittedResource = false);
 
     void DeallocateMemory(ResourceHeapAllocation& allocation);
 
     void Tick(ExecutionSerial lastCompletedSerial);
-
-    void DestroyPool();
 
   private:
     void FreeMemory(ResourceHeapAllocation& allocation);
@@ -94,6 +95,8 @@ class ResourceAllocatorManager {
         D3D12_RESOURCE_STATES initialUsage);
 
     uint64_t GetResourcePadding(const D3D12_RESOURCE_DESC& resourceDescriptor) const;
+
+    void DestroyPool();
 
     Device* mDevice;
     uint32_t mResourceHeapTier;

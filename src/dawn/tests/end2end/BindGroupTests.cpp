@@ -1045,17 +1045,13 @@ TEST_P(BindGroupTests, DynamicOffsetOrder) {
             value : u32
         }
 
-        struct OutputBuffer {
-            value : vec3<u32>
-        }
-
         @group(0) @binding(2) var<uniform> buffer2 : Buffer;
         @group(0) @binding(3) var<storage, read> buffer3 : Buffer;
         @group(0) @binding(0) var<storage, read> buffer0 : Buffer;
-        @group(0) @binding(4) var<storage, read_write> outputBuffer : OutputBuffer;
+        @group(0) @binding(4) var<storage, read_write> outputBuffer : vec3<u32>;
 
         @compute @workgroup_size(1) fn main() {
-            outputBuffer.value = vec3<u32>(buffer0.value, buffer2.value, buffer3.value);
+            outputBuffer = vec3<u32>(buffer0.value, buffer2.value, buffer3.value);
         })");
     pipelineDescriptor.compute.entryPoint = "main";
     pipelineDescriptor.layout = utils::MakeBasicPipelineLayout(device, &bgl);
@@ -1254,7 +1250,7 @@ TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
             color : vec4<f32>
         }
 
-        @group(0) @binding(953) var <uniform> ubo1 : Ubo;
+        @group(0) @binding(553) var <uniform> ubo1 : Ubo;
         @group(0) @binding(47) var <uniform> ubo2 : Ubo;
         @group(0) @binding(111) var <uniform> ubo3 : Ubo;
 
@@ -1295,7 +1291,7 @@ TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
         };
 
         utils::BindingInitializationHelper bindings[] = {
-            {953, color1, 0, 4 * sizeof(float)},  //
+            {553, color1, 0, 4 * sizeof(float)},  //
             {47, color2, 0, 4 * sizeof(float)},   //
             {111, color3, 0, 4 * sizeof(float)},  //
         };

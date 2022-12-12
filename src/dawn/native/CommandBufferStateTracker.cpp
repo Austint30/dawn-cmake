@@ -297,12 +297,19 @@ MaybeError CommandBufferStateTracker::CheckMissingAspects(ValidationAspects aspe
         // because to have invalid aspects one of the above conditions must have failed earlier.
         // If this is reached, make sure lazy aspects and the error checks above are consistent.
         UNREACHABLE();
-        return DAWN_FORMAT_VALIDATION_ERROR("Index buffer is invalid.");
+        return DAWN_VALIDATION_ERROR("Index buffer is invalid.");
     }
 
-    // TODO(dawn:563): Indicate which slots were not set.
-    DAWN_INVALID_IF(aspects[VALIDATION_ASPECT_VERTEX_BUFFERS],
-                    "Vertex buffer slots required by %s were not set.", GetRenderPipeline());
+    if (aspects[VALIDATION_ASPECT_VERTEX_BUFFERS]) {
+        const ityp::bitset<VertexBufferSlot, kMaxVertexBuffers> missingVertexBuffers =
+            GetRenderPipeline()->GetVertexBufferSlotsUsed() & ~mVertexBufferSlotsUsed;
+        ASSERT(missingVertexBuffers.any());
+
+        VertexBufferSlot firstMissing = ityp::Sub(GetHighestBitIndexPlusOne(missingVertexBuffers),
+                                                  VertexBufferSlot(uint8_t(1)));
+        return DAWN_VALIDATION_ERROR("Vertex buffer slot %u required by %s was not set.",
+                                     uint8_t(firstMissing), GetRenderPipeline());
+    }
 
     if (DAWN_UNLIKELY(aspects[VALIDATION_ASPECT_BIND_GROUPS])) {
         for (BindGroupIndex i : IterateBitSet(mLastPipelineLayout->GetBindGroupLayoutsMask())) {
@@ -355,7 +362,7 @@ MaybeError CommandBufferStateTracker::CheckMissingAspects(ValidationAspects aspe
         // because to have invalid aspects one of the above conditions must have failed earlier.
         // If this is reached, make sure lazy aspects and the error checks above are consistent.
         UNREACHABLE();
-        return DAWN_FORMAT_VALIDATION_ERROR("Bind groups are invalid.");
+        return DAWN_VALIDATION_ERROR("Bind groups are invalid.");
     }
 
     UNREACHABLE();

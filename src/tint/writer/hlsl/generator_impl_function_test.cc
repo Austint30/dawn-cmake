@@ -101,7 +101,7 @@ TEST_F(HlslGeneratorImplTest_Function, PtrParameter) {
     // fn f(foo : ptr<function, f32>) -> f32 {
     //   return *foo;
     // }
-    Func("f", utils::Vector{Param("foo", ty.pointer<f32>(ast::StorageClass::kFunction))}, ty.f32(),
+    Func("f", utils::Vector{Param("foo", ty.pointer<f32>(ast::AddressSpace::kFunction))}, ty.f32(),
          utils::Vector{Return(Deref("foo"))});
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -117,7 +117,7 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithInOutVars) 
     // fn frag_main(@location(0) foo : f32) -> @location(1) f32 {
     //   return foo;
     // }
-    auto* foo_in = Param("foo", ty.f32(), utils::Vector{Location(0)});
+    auto* foo_in = Param("foo", ty.f32(), utils::Vector{Location(0_a)});
     Func("frag_main", utils::Vector{foo_in}, ty.f32(),
          utils::Vector{
              Return("foo"),
@@ -126,7 +126,7 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_WithInOutVars) 
              Stage(ast::PipelineStage::kFragment),
          },
          utils::Vector{
-             Location(1),
+             Location(1_a),
          });
 
     GeneratorImpl& gen = SanitizeAndBuild();
@@ -210,8 +210,8 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_SharedStruct_Di
         "Interface",
         utils::Vector{
             Member("pos", ty.vec4<f32>(), utils::Vector{Builtin(ast::BuiltinValue::kPosition)}),
-            Member("col1", ty.f32(), utils::Vector{Location(1)}),
-            Member("col2", ty.f32(), utils::Vector{Location(2)}),
+            Member("col1", ty.f32(), utils::Vector{Location(1_a)}),
+            Member("col2", ty.f32(), utils::Vector{Location(2_a)}),
         });
 
     Func("vert_main", utils::Empty, ty.Of(interface_struct),
@@ -360,7 +360,8 @@ tint_symbol_1 vert_main2() {
 
 TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_Uniform) {
     auto* ubo_ty = Structure("UBO", utils::Vector{Member("coord", ty.vec4<f32>())});
-    auto* ubo = GlobalVar("ubo", ty.Of(ubo_ty), ast::StorageClass::kUniform, Binding(0), Group(1));
+    auto* ubo =
+        GlobalVar("ubo", ty.Of(ubo_ty), ast::AddressSpace::kUniform, Binding(0_a), Group(1_a));
 
     Func("sub_func",
          utils::Vector{
@@ -403,7 +404,7 @@ void frag_main() {
 TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_UniformStruct) {
     auto* s = Structure("Uniforms", utils::Vector{Member("coord", ty.vec4<f32>())});
 
-    GlobalVar("uniforms", ty.Of(s), ast::StorageClass::kUniform, Binding(0), Group(1));
+    GlobalVar("uniforms", ty.Of(s), ast::AddressSpace::kUniform, Binding(0_a), Group(1_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor(MemberAccessor("uniforms", "coord"), "x"));
 
@@ -436,8 +437,8 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_RW_Storage
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(0_a),
+              Group(1_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor("coord", "b"));
 
@@ -469,8 +470,8 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_RO_Storage
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kRead, Binding(0_a),
+              Group(1_a));
 
     auto* var = Var("v", ty.f32(), MemberAccessor("coord", "b"));
 
@@ -502,8 +503,8 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_WO_Storage
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(0_a),
+              Group(1_a));
 
     Func("frag_main", utils::Empty, ty.void_(),
          utils::Vector{
@@ -533,8 +534,8 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_EntryPoint_With_StorageBuf
                                     Member("b", ty.f32()),
                                 });
 
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(0_a),
+              Group(1_a));
 
     Func("frag_main", utils::Empty, ty.void_(),
          utils::Vector{
@@ -560,7 +561,7 @@ void frag_main() {
 
 TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_Called_By_EntryPoint_With_Uniform) {
     auto* s = Structure("S", utils::Vector{Member("x", ty.f32())});
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kUniform, Binding(0), Group(1));
+    GlobalVar("coord", ty.Of(s), ast::AddressSpace::kUniform, Binding(0_a), Group(1_a));
 
     Func("sub_func",
          utils::Vector{
@@ -602,8 +603,8 @@ void frag_main() {
 
 TEST_F(HlslGeneratorImplTest_Function, Emit_Attribute_Called_By_EntryPoint_With_StorageBuffer) {
     auto* s = Structure("S", utils::Vector{Member("x", ty.f32())});
-    GlobalVar("coord", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(1));
+    GlobalVar("coord", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(0_a),
+              Group(1_a));
 
     Func("sub_func",
          utils::Vector{
@@ -713,9 +714,9 @@ void main() {
 
 TEST_F(HlslGeneratorImplTest_Function,
        Emit_Attribute_EntryPoint_Compute_WithWorkgroup_OverridableConst) {
-    Override("width", ty.i32(), Construct(ty.i32(), 2_i), Id(7u));
-    Override("height", ty.i32(), Construct(ty.i32(), 3_i), Id(8u));
-    Override("depth", ty.i32(), Construct(ty.i32(), 4_i), Id(9u));
+    Override("width", ty.i32(), Construct(ty.i32(), 2_i), Id(7_u));
+    Override("height", ty.i32(), Construct(ty.i32(), 3_i), Id(8_u));
+    Override("depth", ty.i32(), Construct(ty.i32(), 4_i), Id(9_u));
     Func("main", utils::Empty, ty.void_(), utils::Empty,
          utils::Vector{
              Stage(ast::PipelineStage::kCompute),
@@ -724,25 +725,10 @@ TEST_F(HlslGeneratorImplTest_Function,
 
     GeneratorImpl& gen = Build();
 
-    ASSERT_TRUE(gen.Generate()) << gen.error();
-    EXPECT_EQ(gen.result(), R"(#ifndef WGSL_SPEC_CONSTANT_7
-#define WGSL_SPEC_CONSTANT_7 2
-#endif
-static const int width = WGSL_SPEC_CONSTANT_7;
-#ifndef WGSL_SPEC_CONSTANT_8
-#define WGSL_SPEC_CONSTANT_8 3
-#endif
-static const int height = WGSL_SPEC_CONSTANT_8;
-#ifndef WGSL_SPEC_CONSTANT_9
-#define WGSL_SPEC_CONSTANT_9 4
-#endif
-static const int depth = WGSL_SPEC_CONSTANT_9;
-
-[numthreads(WGSL_SPEC_CONSTANT_7, WGSL_SPEC_CONSTANT_8, WGSL_SPEC_CONSTANT_9)]
-void main() {
-  return;
-}
-)");
+    EXPECT_FALSE(gen.Generate()) << gen.error();
+    EXPECT_EQ(
+        gen.error(),
+        R"(error: override-expressions should have been removed with the SubstituteOverride transform)");
 }
 
 TEST_F(HlslGeneratorImplTest_Function, Emit_Function_WithArrayParams) {
@@ -845,8 +831,8 @@ TEST_F(HlslGeneratorImplTest_Function, Emit_Multiple_EntryPoint_With_Same_Module
 
     auto* s = Structure("Data", utils::Vector{Member("d", ty.f32())});
 
-    GlobalVar("data", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite, Binding(0),
-              Group(0));
+    GlobalVar("data", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite, Binding(0_a),
+              Group(0_a));
 
     {
         auto* var = Var("v", ty.f32(), MemberAccessor("data", "d"));

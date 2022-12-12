@@ -39,7 +39,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"dawn.googlesource.com/dawn/tools/src/utils"
+	"dawn.googlesource.com/dawn/tools/src/fileutils"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
 )
@@ -615,9 +615,13 @@ func (r *runner) runServer(id int, caseIndices <-chan int, results chan<- result
 			"placeholder-arg",
 			// Actual arguments begin here
 			"--gpu-provider", r.dawnNode,
+			"--data", filepath.Join(r.cts, "out-node", "data"),
 		}
 		if r.colors {
 			args = append(args, "--colors")
+		}
+		if r.verbose {
+			args = append(args, "--verbose")
 		}
 		for _, f := range r.flags {
 			args = append(args, "--gpu-provider-flag", f)
@@ -1174,7 +1178,7 @@ func saveExpectations(path string, ex testcaseStatuses) error {
 // directory, falling back to PATH. This is used as the default for the --node
 // command line flag.
 func defaultNodePath() string {
-	if dawnRoot := utils.DawnRoot(); dawnRoot != "" {
+	if dawnRoot := fileutils.DawnRoot(); dawnRoot != "" {
 		node := filepath.Join(dawnRoot, "third_party/node")
 		if info, err := os.Stat(node); err == nil && info.IsDir() {
 			path := ""
@@ -1204,7 +1208,7 @@ func defaultNodePath() string {
 // defaultCtsPath looks for the webgpu-cts directory in dawn's third_party
 // directory. This is used as the default for the --cts command line flag.
 func defaultCtsPath() string {
-	if dawnRoot := utils.DawnRoot(); dawnRoot != "" {
+	if dawnRoot := fileutils.DawnRoot(); dawnRoot != "" {
 		cts := filepath.Join(dawnRoot, "third_party/webgpu-cts")
 		if info, err := os.Stat(cts); err == nil && info.IsDir() {
 			return cts

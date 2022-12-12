@@ -38,6 +38,7 @@ enum class System {
     AST,
     Clone,
     Inspector,
+    IR,
     Program,
     ProgramBuilder,
     Reader,
@@ -46,6 +47,7 @@ enum class System {
     Symbol,
     Test,
     Transform,
+    Type,
     Utils,
     Writer,
 };

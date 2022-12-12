@@ -22,7 +22,7 @@ namespace {
 using WgslGeneratorImplTest = TestHelper;
 
 TEST_F(WgslGeneratorImplTest, EmitVariable) {
-    auto* v = GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate);
+    auto* v = GlobalVar("a", ty.f32(), ast::AddressSpace::kPrivate);
 
     GeneratorImpl& gen = Build();
 
@@ -31,8 +31,8 @@ TEST_F(WgslGeneratorImplTest, EmitVariable) {
     EXPECT_EQ(out.str(), R"(var<private> a : f32;)");
 }
 
-TEST_F(WgslGeneratorImplTest, EmitVariable_StorageClass) {
-    auto* v = GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate);
+TEST_F(WgslGeneratorImplTest, EmitVariable_AddressSpace) {
+    auto* v = GlobalVar("a", ty.f32(), ast::AddressSpace::kPrivate);
 
     GeneratorImpl& gen = Build();
 
@@ -43,8 +43,8 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_StorageClass) {
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_Access_Read) {
     auto* s = Structure("S", utils::Vector{Member("a", ty.i32())});
-    auto* v = GlobalVar("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kRead, Binding(0),
-                        Group(0));
+    auto* v = GlobalVar("a", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kRead,
+                        Binding(0_a), Group(0_a));
 
     GeneratorImpl& gen = Build();
 
@@ -55,8 +55,8 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_Access_Read) {
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_Access_ReadWrite) {
     auto* s = Structure("S", utils::Vector{Member("a", ty.i32())});
-    auto* v = GlobalVar("a", ty.Of(s), ast::StorageClass::kStorage, ast::Access::kReadWrite,
-                        Binding(0), Group(0));
+    auto* v = GlobalVar("a", ty.Of(s), ast::AddressSpace::kStorage, ast::Access::kReadWrite,
+                        Binding(0_a), Group(0_a));
 
     GeneratorImpl& gen = Build();
 
@@ -66,7 +66,7 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_Access_ReadWrite) {
 }
 
 TEST_F(WgslGeneratorImplTest, EmitVariable_Decorated) {
-    auto* v = GlobalVar("a", ty.sampler(ast::SamplerKind::kSampler), Group(1), Binding(2));
+    auto* v = GlobalVar("a", ty.sampler(ast::SamplerKind::kSampler), Group(1_a), Binding(2_a));
 
     GeneratorImpl& gen = Build();
 
@@ -75,8 +75,8 @@ TEST_F(WgslGeneratorImplTest, EmitVariable_Decorated) {
     EXPECT_EQ(out.str(), R"(@group(1) @binding(2) var a : sampler;)");
 }
 
-TEST_F(WgslGeneratorImplTest, EmitVariable_Constructor) {
-    auto* v = GlobalVar("a", ty.f32(), ast::StorageClass::kPrivate, Expr(1_f));
+TEST_F(WgslGeneratorImplTest, EmitVariable_Initializer) {
+    auto* v = GlobalVar("a", ty.f32(), ast::AddressSpace::kPrivate, Expr(1_f));
 
     GeneratorImpl& gen = Build();
 

@@ -24,7 +24,6 @@
 // Forward declarations
 namespace tint::sem {
 class Statement;
-class Type;
 class Variable;
 }  // namespace tint::sem
 
@@ -40,14 +39,14 @@ class Expression : public Castable<Expression, Node> {
     /// @param statement the statement that owns this expression
     /// @param constant the constant value of the expression. May be null
     /// @param has_side_effects true if this expression may have side-effects
-    /// @param source_var the (optional) source variable for this expression
+    /// @param root_ident the (optional) root identifier for this expression
     Expression(const ast::Expression* declaration,
-               const sem::Type* type,
+               const type::Type* type,
                EvaluationStage stage,
                const Statement* statement,
                const Constant* constant,
                bool has_side_effects,
-               const Variable* source_var = nullptr);
+               const Variable* root_ident = nullptr);
 
     /// Destructor
     ~Expression() override;
@@ -56,7 +55,7 @@ class Expression : public Castable<Expression, Node> {
     const ast::Expression* Declaration() const { return declaration_; }
 
     /// @return the resolved type of the expression
-    const sem::Type* Type() const { return type_; }
+    const type::Type* Type() const { return type_; }
 
     /// @return the earliest evaluation stage for the expression
     EvaluationStage Stage() const { return stage_; }
@@ -71,8 +70,8 @@ class Expression : public Castable<Expression, Node> {
     /// For reference and pointer expressions, this will either be the originating
     /// variable or a function parameter. For other types of expressions, it will
     /// either be the parameter or constant declaration, or nullptr.
-    /// @return the source variable of this expression, or nullptr
-    const Variable* SourceVariable() const { return source_variable_; }
+    /// @return the root identifier of this expression, or nullptr
+    const Variable* RootIdentifier() const { return root_identifier_; }
 
     /// @return the behaviors of this statement
     const sem::Behaviors& Behaviors() const { return behaviors_; }
@@ -89,11 +88,11 @@ class Expression : public Castable<Expression, Node> {
   protected:
     /// The AST expression node for this semantic expression
     const ast::Expression* const declaration_;
-    /// The source variable for this semantic expression, or nullptr
-    const Variable* source_variable_;
+    /// The root identifier for this semantic expression, or nullptr
+    const Variable* root_identifier_;
 
   private:
-    const sem::Type* const type_;
+    const type::Type* const type_;
     const EvaluationStage stage_;
     const Statement* const statement_;
     const Constant* const constant_;
