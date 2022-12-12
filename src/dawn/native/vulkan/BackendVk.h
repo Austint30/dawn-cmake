@@ -50,7 +50,7 @@ class VulkanInstance : public RefCounted {
   public:
     static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd);
     static ResultOrError<Ref<VulkanInstance>> Create(const InstanceBase* instance, ICD icd, OverrideFunctions overrideFunctions);
-    ~VulkanInstance();
+    ~VulkanInstance() override;
 
     const VulkanFunctions& GetFunctions() const;
     VkInstance GetVkInstance() const;

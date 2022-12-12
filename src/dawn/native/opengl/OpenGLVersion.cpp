@@ -25,10 +25,18 @@ MaybeError OpenGLVersion::Initialize(GetProcAddress getProc) {
     if (getString == nullptr) {
         return DAWN_INTERNAL_ERROR("Couldn't load glGetString");
     }
+    PFNGLGETERRORPROC getError = reinterpret_cast<PFNGLGETERRORPROC>(getProc("glGetError"));
+    if (getError == nullptr) {
+        return DAWN_INTERNAL_ERROR("Couldn't load glGetError");
+    }
 
-    std::string version = reinterpret_cast<const char*>(getString(GL_VERSION));
+    const char* version = reinterpret_cast<const char*>(getString(GL_VERSION));
+    if (version == nullptr) {
+        GLenum error = getError();
+        return DAWN_INTERNAL_ERROR("glGetString failed: {}");
+    }
 
-    if (version.find("OpenGL ES") != std::string::npos) {
+    if (strstr(version, "OpenGL ES") != nullptr) {
         // ES spec states that the GL_VERSION string will be in the following format:
         // "OpenGL ES N.M vendor-specific information"
         mStandard = Standard::ES;
@@ -36,7 +44,7 @@ MaybeError OpenGLVersion::Initialize(GetProcAddress getProc) {
         mMinorVersion = version[12] - '0';
 
         // The minor version shouldn't get to two digits.
-        ASSERT(version.size() <= 13 || !isdigit(version[13]));
+        ASSERT(strlen(version) <= 13 || !isdigit(version[13]));
     } else {
         // OpenGL spec states the GL_VERSION string will be in the following format:
         // <version number><space><vendor-specific information>
@@ -48,7 +56,7 @@ MaybeError OpenGLVersion::Initialize(GetProcAddress getProc) {
         mMinorVersion = version[2] - '0';
 
         // The minor version shouldn't get to two digits.
-        ASSERT(version.size() <= 3 || !isdigit(version[3]));
+        ASSERT(strlen(version) <= 3 || !isdigit(version[3]));
     }
 
     return {};
@@ -60,6 +68,10 @@ bool OpenGLVersion::IsDesktop() const {
 
 bool OpenGLVersion::IsES() const {
     return mStandard == Standard::ES;
+}
+
+OpenGLVersion::Standard OpenGLVersion::GetStandard() const {
+    return mStandard;
 }
 
 uint32_t OpenGLVersion::GetMajor() const {
