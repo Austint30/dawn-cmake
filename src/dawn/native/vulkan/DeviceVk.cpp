@@ -554,8 +554,8 @@ ResultOrError<VulkanDeviceKnobs> Device::CreateDevice(VkPhysicalDevice physicalD
         createInfo.pEnabledFeatures = &usedKnobs.features;
     }
 
-    if (mOverrideFunctions.overrideVkCreateDevice != nullptr){
-        DAWN_TRY(CheckVkSuccess(mOverrideFunctions.overrideVkCreateDevice(physicalDevice, &createInfo, nullptr, &mVkDevice, fn.GetInstanceProcAddr), "vkCreateDevice"));
+    if (mOverrideFunctions && mOverrideFunctions->overrideVkCreateDevice != nullptr){
+        DAWN_TRY(CheckVkSuccess(mOverrideFunctions->overrideVkCreateDevice(physicalDevice, &createInfo, nullptr, &mVkDevice, fn.GetInstanceProcAddr), "vkCreateDevice"));
     } else {
         DAWN_TRY(CheckVkSuccess(fn.CreateDevice(physicalDevice, &createInfo, nullptr, &mVkDevice),
                                 "vkCreateDevice"));

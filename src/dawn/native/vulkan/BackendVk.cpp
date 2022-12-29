@@ -167,7 +167,7 @@ OnInstanceCreationDebugUtilsCallback(VkDebugUtilsMessageSeverityFlagBitsEXT mess
 VulkanInstance::VulkanInstance() = default;
 
 VulkanInstance::VulkanInstance(OverrideFunctions overrideFunctions)
-    : mOverrideFunctions(overrideFunctions) {}
+    : mOverrideFunctions(std::move(overrideFunctions)) {}
 
 VulkanInstance::~VulkanInstance() {
     ASSERT(mMessageListenerDevices.empty());
@@ -215,7 +215,7 @@ ResultOrError<Ref<VulkanInstance>> VulkanInstance::Create(
     ICD icd,
     OverrideFunctions overrideFunctions) {
     Ref<VulkanInstance> vulkanInstance =
-        AcquireRef(new VulkanInstance(overrideFunctions));
+        AcquireRef(new VulkanInstance(std::move(overrideFunctions)));
     DAWN_TRY(vulkanInstance->Initialize(instance, icd));
     return std::move(vulkanInstance);
 }
@@ -295,8 +295,8 @@ MaybeError VulkanInstance::Initialize(const InstanceBase* instance, ICD icd) {
         DAWN_TRY(RegisterDebugUtils());
     }
 
-    if (mOverrideFunctions.overrideGatherPhysicalDevices != nullptr){
-        mPhysicalDevices = mOverrideFunctions.overrideGatherPhysicalDevices(mInstance, mFunctions.GetInstanceProcAddr);
+    if (mOverrideFunctions && mOverrideFunctions->overrideGatherPhysicalDevices != nullptr){
+        mPhysicalDevices = mOverrideFunctions->overrideGatherPhysicalDevices(mInstance, mFunctions.GetInstanceProcAddr);
     } else {
         DAWN_TRY_ASSIGN(mPhysicalDevices, GatherPhysicalDevices(mInstance, mFunctions));
     }
@@ -403,9 +403,9 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
         createInfoChain.Add(&validationFeatures, VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT);
     }
 
-    if (mOverrideFunctions.overrideVkCreateInstance != nullptr) {
+    if (mOverrideFunctions && mOverrideFunctions->overrideVkCreateInstance != nullptr) {
         DAWN_TRY(CheckVkSuccess(
-            mOverrideFunctions.overrideVkCreateInstance(&createInfo, nullptr, &mInstance, mFunctions.GetInstanceProcAddr),
+            mOverrideFunctions->overrideVkCreateInstance(&createInfo, nullptr, &mInstance, mFunctions.GetInstanceProcAddr),
             "vkCreateInstance"));
     } else {
         DAWN_TRY(CheckVkSuccess(mFunctions.CreateInstance(&createInfo, nullptr, &mInstance),
@@ -490,7 +490,7 @@ ResultOrError<std::vector<Ref<AdapterBase>>> Backend::DiscoverAdapters(
         if (mVulkanInstances[icd] == nullptr && instance->ConsumedError([&]() -> MaybeError {
                 DAWN_TRY_ASSIGN(
                     mVulkanInstances[icd],
-                    VulkanInstance::Create(instance, icd, options->overrideFunctions));
+                    VulkanInstance::Create(instance, icd, std::move(options->overrideFunctions)));
                 return {};
             }())) {
             // Instance failed to initialize.

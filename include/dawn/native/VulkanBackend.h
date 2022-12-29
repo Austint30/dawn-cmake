@@ -25,18 +25,22 @@
 
 namespace dawn::native::vulkan {
 
-typedef VkResult (*PFN_overrideVkCreateInstance)(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
+typedef VkResult (*PFN_overrideVkCreateInstance)(VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
 typedef std::vector<VkPhysicalDevice> (*PFN_overrideGatherPhysicalDevices)(
     VkInstance instance,
     const PFN_vkGetInstanceProcAddr& vkGetInstanceProcAddr);
 
-typedef VkResult (*PFN_overrideVkCreateDevice)(VkPhysicalDevice,const VkDeviceCreateInfo *,const VkAllocationCallbacks *,VkDevice *, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
+typedef VkResult (*PFN_overrideVkCreateDevice)(VkPhysicalDevice,VkDeviceCreateInfo *,const VkAllocationCallbacks *,VkDevice *, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
 
-DAWN_NATIVE_EXPORT struct OverrideFunctions {
+typedef VkResult (*PFN_overrideVkSetDebugUtilsObjectNameEXT)(VkDevice vkDevice, const VkDebugUtilsObjectNameInfoEXT*, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr);
+
+DAWN_NATIVE_EXPORT struct OverrideFunctionsInternal {
     PFN_overrideVkCreateInstance overrideVkCreateInstance = nullptr;
     PFN_overrideGatherPhysicalDevices overrideGatherPhysicalDevices = nullptr;
     PFN_overrideVkCreateDevice overrideVkCreateDevice = nullptr;
 };
+
+DAWN_NATIVE_EXPORT typedef OverrideFunctionsInternal* OverrideFunctions;
 
 DAWN_NATIVE_EXPORT VkInstance GetInstance(WGPUDevice device);
 
