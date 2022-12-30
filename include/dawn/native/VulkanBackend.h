@@ -62,7 +62,7 @@ struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptio
     AdapterDiscoveryOptions(OverrideFunctions overrideFunctions);
 
     bool forceSwiftShader = false;
-    OverrideFunctions overrideFunctions;
+    OverrideFunctions overrideFunctions = nullptr;
 };
 
 struct DAWN_NATIVE_EXPORT ExternalImageDescriptorVk : ExternalImageDescriptor {
