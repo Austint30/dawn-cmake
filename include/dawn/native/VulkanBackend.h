@@ -20,7 +20,6 @@
 #include <array>
 #include <vector>
 
-#include "dawn/dawn_wsi.h"
 #include "dawn/native/DawnNative.h"
 
 namespace dawn::native::vulkan {
@@ -48,21 +47,22 @@ DAWN_NATIVE_EXPORT VkPhysicalDevice GetPhysicalDevice(WGPUDevice device);
 
 DAWN_NATIVE_EXPORT PFN_vkVoidFunction GetInstanceProcAddr(WGPUDevice device, const char* pName);
 
-DAWN_NATIVE_EXPORT VkDevice GetDevice(WGPUDevice device);
-
-DAWN_NATIVE_EXPORT int GetQueueGraphicsFamily(WGPUDevice device);
-
-DAWN_NATIVE_EXPORT DawnSwapChainImplementation CreateNativeSwapChainImpl(WGPUDevice device,
-                                                                         ::VkSurfaceKHR surface);
-DAWN_NATIVE_EXPORT WGPUTextureFormat
-GetNativeSwapChainPreferredFormat(const DawnSwapChainImplementation* swapChain);
-
-struct DAWN_NATIVE_EXPORT AdapterDiscoveryOptions : public AdapterDiscoveryOptionsBase {
-    AdapterDiscoveryOptions();
-    AdapterDiscoveryOptions(OverrideFunctions overrideFunctions);
-
-    bool forceSwiftShader = false;
+struct DAWN_NATIVE_EXPORT PhysicalDeviceDiscoveryOptions
+    : public PhysicalDeviceDiscoveryOptionsBase {
+    PhysicalDeviceDiscoveryOptions();
+    PhysicalDeviceDiscoveryOptions(OverrideFunctions overrideFunctions);
+    DAWN_NATIVE_EXPORT VkDevice GetDevice(WGPUDevice device);
     OverrideFunctions overrideFunctions = nullptr;
+};
+
+// TODO(dawn:1774): Deprecated.
+using AdapterDiscoveryOptions = PhysicalDeviceDiscoveryOptions;
+
+enum class NeedsDedicatedAllocation {
+    Yes,
+    No,
+    // Use Vulkan reflection to detect whether a dedicated allocation is needed.
+    Detect,
 };
 
 struct DAWN_NATIVE_EXPORT ExternalImageDescriptorVk : ExternalImageDescriptor {
@@ -78,6 +78,11 @@ struct DAWN_NATIVE_EXPORT ExternalImageDescriptorVk : ExternalImageDescriptor {
     // desired usage.
     VkImageLayout releasedOldLayout = VK_IMAGE_LAYOUT_GENERAL;
     VkImageLayout releasedNewLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    // Try to detect the need to use a dedicated allocation for imported images by default but let
+    // the application override this as drivers have bugs and forget to require a dedicated
+    // allocation.
+    NeedsDedicatedAllocation dedicatedAllocation = NeedsDedicatedAllocation::Detect;
 
   protected:
     using ExternalImageDescriptor::ExternalImageDescriptor;
@@ -151,6 +156,26 @@ struct DAWN_NATIVE_EXPORT ExternalImageExportInfoDmaBuf : ExternalImageExportInf
     ExternalImageExportInfoDmaBuf();
 };
 
+#ifdef __ANDROID__
+
+// Descriptor for AHardwareBuffer image import
+struct DAWN_NATIVE_EXPORT ExternalImageDescriptorAHardwareBuffer : ExternalImageDescriptorVk {
+  public:
+    ExternalImageDescriptorAHardwareBuffer();
+
+    struct AHardwareBuffer* handle;  // The AHardwareBuffer which contains the memory of the image
+    std::vector<int> waitFDs;        // File descriptors of semaphores which will be waited on
+
+  protected:
+    using ExternalImageDescriptorVk::ExternalImageDescriptorVk;
+};
+
+struct DAWN_NATIVE_EXPORT ExternalImageExportInfoAHardwareBuffer : ExternalImageExportInfoFD {
+    ExternalImageExportInfoAHardwareBuffer();
+};
+
+#endif  // __ANDROID__
+
 #endif  // __linux__
 
 // Imports external memory into a Vulkan image. Internally, this uses external memory /
@@ -167,6 +192,8 @@ DAWN_NATIVE_EXPORT WGPUTexture WrapVulkanImage(WGPUDevice device,
 DAWN_NATIVE_EXPORT bool ExportVulkanImage(WGPUTexture texture,
                                           VkImageLayout desiredLayout,
                                           ExternalImageExportInfoVk* info);
+// |ExportVulkanImage| with default desiredLayout of VK_IMAGE_LAYOUT_UNDEFINED.
+DAWN_NATIVE_EXPORT bool ExportVulkanImage(WGPUTexture texture, ExternalImageExportInfoVk* info);
 
 }  // namespace dawn::native::vulkan
 
