@@ -100,7 +100,7 @@ ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
 Device::Device(AdapterBase* adapter,
                const DeviceDescriptor* descriptor,
                const TogglesState& deviceToggles,
-               OverrideFunctions overrideFunctions)
+               OverrideFunctions overrideFunctions = nullptr)
     : DeviceBase(adapter, descriptor, deviceToggles),
       mOverrideFunctions(overrideFunctions),
       mDebugPrefix(GetNextDeviceDebugPrefix()) {}

@@ -46,7 +46,7 @@ class Device final : public DeviceBase {
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
                                              const DeviceDescriptor* descriptor,
                                              const TogglesState& deviceToggles,
-                                             OverrideFunctions overrideFunctions);
+                                             OverrideFunctions overrideFunctions = nullptr);
     ~Device() override;
 
     MaybeError Initialize(const DeviceDescriptor* descriptor);

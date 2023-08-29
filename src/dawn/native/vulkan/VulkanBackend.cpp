@@ -23,6 +23,7 @@
 
 #include "dawn/native/vulkan/DeviceVk.h"
 #include "dawn/native/vulkan/TextureVk.h"
+#include "dawn/native/vulkan/PhysicalDeviceVk.h"
 
 namespace dawn::native::vulkan {
 
@@ -38,9 +39,8 @@ DAWN_NATIVE_EXPORT PFN_vkVoidFunction GetInstanceProcAddr(WGPUDevice device, con
 
 DAWN_NATIVE_EXPORT VkPhysicalDevice GetPhysicalDevice(WGPUDevice device) {
     Device* backendDevice = ToBackend(FromAPI(device));
-    vulkan::Adapter* adapter = (Adapter*) backendDevice->GetAdapter();
-
-    return adapter->GetPhysicalDevice();
+    PhysicalDevice* physicalDevice = ToBackend(backendDevice->GetPhysicalDevice());
+    return physicalDevice->GetVkPhysicalDevice();
 }
 
 DAWN_NATIVE_EXPORT VkDevice GetDevice(WGPUDevice device) {
@@ -56,11 +56,9 @@ DAWN_NATIVE_EXPORT int GetQueueGraphicsFamily(WGPUDevice device) {
 PhysicalDeviceDiscoveryOptions::PhysicalDeviceDiscoveryOptions()
     : PhysicalDeviceDiscoveryOptionsBase(WGPUBackendType_Vulkan) {}
 
-
-AdapterDiscoveryOptions::AdapterDiscoveryOptions(
-    OverrideFunctions overrideFunctions)
-    : AdapterDiscoveryOptionsBase(WGPUBackendType_Vulkan),
-      overrideFunctions(overrideFunctions) {}
+PhysicalDeviceDiscoveryOptions::PhysicalDeviceDiscoveryOptions(OverrideFunctions overrideFunctions)
+    : PhysicalDeviceDiscoveryOptionsBase(WGPUBackendType_Vulkan),
+    overrideFunctions(overrideFunctions){}
 
 #if DAWN_PLATFORM_IS(LINUX)
 ExternalImageDescriptorOpaqueFD::ExternalImageDescriptorOpaqueFD()

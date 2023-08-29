@@ -51,8 +51,9 @@ struct DAWN_NATIVE_EXPORT PhysicalDeviceDiscoveryOptions
     : public PhysicalDeviceDiscoveryOptionsBase {
     PhysicalDeviceDiscoveryOptions();
     PhysicalDeviceDiscoveryOptions(OverrideFunctions overrideFunctions);
-    DAWN_NATIVE_EXPORT VkDevice GetDevice(WGPUDevice device);
+
     OverrideFunctions overrideFunctions = nullptr;
+    bool forceSwiftShader = false;
 };
 
 // TODO(dawn:1774): Deprecated.
