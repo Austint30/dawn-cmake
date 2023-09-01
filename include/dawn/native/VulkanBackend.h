@@ -45,6 +45,10 @@ DAWN_NATIVE_EXPORT VkInstance GetInstance(WGPUDevice device);
 
 DAWN_NATIVE_EXPORT VkPhysicalDevice GetPhysicalDevice(WGPUDevice device);
 
+DAWN_NATIVE_EXPORT VkDevice GetDevice(WGPUDevice device);
+
+DAWN_NATIVE_EXPORT int GetQueueGraphicsFamily(WGPUDevice device);
+
 DAWN_NATIVE_EXPORT PFN_vkVoidFunction GetInstanceProcAddr(WGPUDevice device, const char* pName);
 
 struct DAWN_NATIVE_EXPORT PhysicalDeviceDiscoveryOptions
